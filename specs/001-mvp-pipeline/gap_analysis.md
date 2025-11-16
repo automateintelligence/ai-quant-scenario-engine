@@ -312,16 +312,23 @@ live:
 
 ---
 
-### G18: Incomplete Test Coverage Guidance
+### G18: Incomplete Test Coverage Guidance ✅ RESOLVED
 **Location**: spec.md (tests not explicitly requested), tasks.md line 6, plan.md line 17
 **Issue**: Constitution requires ≥80% coverage but:
 - No test tasks in tasks.md
-- "Not explicitly requested" note creates confusion
+- "Not explicitly requested" note created confusion
 - Which modules require property-based tests?
 - Contract test scope unclear
 
 **Impact**: Agents may skip testing entirely
-**Resolution Needed**: Add explicit test tasks to Phase 12 or clarify testing strategy
+**Resolution**: Added comprehensive "Testing Strategy" section to tasks.md with:
+- Test-during-implementation pattern (not deferred to Phase 12)
+- Directory structure (unit/integration/contract)
+- Coverage requirements by module type (100% critical, 90% core, 80% infrastructure)
+- Property-based testing guidance with hypothesis
+- Merge criteria requiring ≥80% coverage gate
+- Test execution commands and fixtures
+- Updated T007 to include pytest, pytest-cov, hypothesis, pytest-mock
 
 ---
 
@@ -484,7 +491,8 @@ live:
 |----------|-------|----------|
 | 🔴 Critical Gaps | 8 | MUST FIX before implementation |
 | 🟡 High Priority | 8 | FIX before Phase 3 (US1) |
-| 🟢 Medium Priority | 8 | FIX before Phase 12 (Polish) |
+| 🟢 Medium Priority | 7 | FIX before Phase 12 (Polish) |
+| ✅ Resolved | 1 | G18 - Testing strategy added |
 | 📋 Ambiguities | 4 | CLARIFY in next spec revision |
 | ✅ Recommendations | 5 | NICE TO HAVE |
 

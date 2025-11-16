@@ -3,7 +3,7 @@
 **Input**: Design documents from `/specs/001-mvp-pipeline/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/openapi.yaml
 
-**Tests**: Not explicitly requested in specification - implementing core functionality only per constitution principle (build only what spec requires)
+**Testing Strategy**: Per Constitution Principle XV, ≥80% line coverage required. Tests MUST be written during implementation tasks, not deferred. Each module PR requires passing tests and coverage verification before merge. See "Testing Strategy" section below for detailed guidance.
 
 **DM-Series Coverage**: Added T020d-g to address gaps identified in Specification_Analysis_Report.md (DM-001/002/003 resolution tiers, DM-005 feature separation, DM-007 symbol tiers, DM-013 versioning). Existing tasks T019, T020, T020a-c, T030-031 cover remaining DM requirements.
 
@@ -35,7 +35,7 @@ Per plan.md structure:
 - [ ] T004 [P] Setup mypy type checking configuration in pyproject.toml
 - [ ] T005 [P] Create .gitignore for Python (venv, __pycache__, *.pyc, .pytest_cache, runs/, data/historical/, data/features/)
 - [ ] T006 [P] Create README.md with quickstart instructions per plan.md onboarding section
-- [ ] T007 Create requirements-dev.txt with testing/dev dependencies (pytest, pytest-cov, ruff, black, mypy)
+- [ ] T007 Create requirements-dev.txt with testing/dev dependencies (pytest, pytest-cov, pytest-mock, hypothesis, ruff, black, mypy) and setup pytest.ini with coverage config
 
 # Added to address new FR/NFR/DM gaps
 - [ ] T007a Define performance budget benchmarks and add validation script (measure data load, fit, MC throughput, strategy eval) per FR-015 and FR-040 (scripts/benchmarks/perf_check.py)
@@ -71,6 +71,238 @@ Per plan.md structure:
 - [ ] T020g [P] Create Universe/Watchlist/Live Set configuration schema (symbol tiers: Universe=daily+5min, Watchlist=daily+5min+features, Live=all resolutions) per DM-007
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
+
+---
+
+## Testing Strategy (Applied Throughout All Phases)
+
+**Constitutional Mandate**: Principle XV requires ≥80% line coverage with comprehensive testing discipline.
+
+### Test-During-Implementation Pattern
+
+**CRITICAL**: Tests are NOT deferred to Phase 12. Write tests during each implementation task:
+
+```
+Implementation Task Flow:
+1. Implement module/function (e.g., T021 YFinanceDataSource)
+2. Write corresponding tests (tests/unit/data/test_yfinance.py)
+3. Run coverage: pytest --cov=backtesting.data.yfinance --cov-report=term-missing
+4. Verify ≥80% coverage achieved
+5. Fix coverage gaps
+6. Mark task complete only when tests pass + coverage met
+```
+
+### Test Organization by Directory
+
+```
+tests/
+├── unit/                    # Fast, isolated, mocked external I/O
+│   ├── data/
+│   │   ├── test_yfinance.py
+│   │   ├── test_schwab_stub.py
+│   │   └── test_validation.py
+│   ├── distributions/
+│   │   ├── test_laplace.py
+│   │   ├── test_student_t.py
+│   │   └── test_validation.py
+│   ├── mc/
+│   │   ├── test_generator.py
+│   │   └── test_storage.py
+│   ├── pricing/
+│   │   ├── test_black_scholes.py
+│   │   └── test_py_vollib.py
+│   ├── strategies/
+│   │   ├── test_stock_basic.py
+│   │   └── test_option_call.py
+│   └── simulation/
+│       ├── test_simulator.py
+│       ├── test_metrics.py
+│       └── test_compare.py
+├── integration/             # End-to-end workflows, real I/O
+│   ├── test_data_pipeline.py
+│   ├── test_mc_end_to_end.py
+│   ├── test_simulation_workflows.py
+│   └── cli/
+│       ├── test_compare_e2e.py
+│       ├── test_grid_e2e.py
+│       └── test_screen_e2e.py
+└── contract/                # Schema/interface compliance
+    ├── test_cli_schemas.py      # Validate against openapi.yaml
+    ├── test_interfaces.py       # All implementations satisfy ABCs
+    └── test_run_meta_schema.py  # Validate run_meta.json structure
+```
+
+### Test Requirements by Type
+
+**Unit Tests** (target: 85% of test suite):
+- Mock all external I/O (HTTP, file system, random number generation)
+- Test single function/class in isolation
+- Fast execution (<1s per test, <10s for entire unit suite)
+- Focus on edge cases, boundary conditions, error paths
+- Use parametrize for combinatorial cases
+
+**Integration Tests** (target: 10% of test suite):
+- Real file I/O with temp directories
+- Full workflows from data load → artifacts
+- Slower execution (acceptable <10s per test)
+- Test component interactions and data flow
+- Verify artifact generation and persistence
+
+**Contract Tests** (target: 5% of test suite):
+- Validate CLI inputs against contracts/openapi.yaml using schemathesis
+- Verify all interface implementations satisfy ABC contracts
+- Validate run_meta.json against defined schema
+- Test configuration precedence (CLI > ENV > YAML)
+
+### Coverage Requirements by Module Type
+
+**Critical Paths** (100% coverage required):
+- Monte Carlo generation (backtesting/mc/generator.py)
+- Option pricing calculations (pricing/black_scholes.py)
+- P&L simulation (simulation/simulator.py)
+- Metrics calculations (simulation/metrics.py)
+
+**Core Logic** (≥90% coverage required):
+- Distributions (fit/sample methods)
+- Strategies (signal generation)
+- Data validation (schema checks, missing data)
+- Storage policy (memory threshold decisions)
+
+**Infrastructure** (≥80% coverage required):
+- CLI commands and validation
+- Config loaders
+- Exception handling
+- Logging and artifacts
+
+**Utilities** (≥70% coverage acceptable):
+- Plotting/reporting (optional features)
+- Helper functions
+- Constants and enums
+
+### Property-Based Testing Recommendations
+
+Use `hypothesis` library for distributions and MC generation:
+
+```python
+# tests/unit/distributions/test_laplace.py
+from hypothesis import given, strategies as st
+
+@given(
+    returns=st.lists(st.floats(min_value=-0.5, max_value=0.5), min_size=60, max_size=252),
+    seed=st.integers(min_value=0, max_value=2**31)
+)
+def test_laplace_reproducibility(returns, seed):
+    """Same seed produces identical samples."""
+    dist = LaplaceDistribution()
+    dist.fit(np.array(returns))
+    sample1 = dist.sample(n_paths=100, n_steps=60, seed=seed)
+    sample2 = dist.sample(n_paths=100, n_steps=60, seed=seed)
+    np.testing.assert_array_equal(sample1, sample2)
+```
+
+### Testing Phases Mapped to Implementation
+
+**Phase 2 (Foundation) - Test Setup**:
+- T007: Add pytest, pytest-cov, hypothesis to requirements-dev.txt
+- Create tests/{unit,integration,contract}/ directory structure
+- Setup pytest.ini with coverage config
+- Write tests for all interfaces (T013-T016) - 100% coverage required
+
+**Phase 3 (US1) - Core Test Suite**:
+- Unit tests for every T021-T048 implementation task
+- Integration tests for data pipeline, MC generation, simulation workflows
+- Contract tests for compare CLI against openapi.yaml
+- Property-based tests for distributions
+
+**Phase 4-10 (US2-US8) - Feature Tests**:
+- Unit tests written during each story implementation
+- Integration tests for new workflows (grid, screening, conditional)
+- Contract tests for new CLI commands
+
+**Phase 12 (Polish) - Coverage Gap Analysis**:
+- T127: Run coverage analysis and fill gaps to ≥80%
+- Contract test suite completion for all CLI commands
+- Performance regression tests for SC-001/SC-002 budgets
+
+### Merge Criteria (Constitutional Gate)
+
+Before any PR merge:
+1. ✅ All tests pass
+2. ✅ New code achieves ≥80% line coverage (use `--cov-report=term-missing` to verify)
+3. ✅ No coverage regression from prior modules
+4. ✅ Contract tests validate against openapi.yaml (for CLI changes)
+5. ✅ Linting passes (ruff, black, mypy)
+6. ✅ Type hints present on all public functions
+
+### Test Execution Commands
+
+```bash
+# Run all tests with coverage
+pytest tests/ --cov=backtesting --cov=quant-scenario-engine --cov-report=term-missing --cov-report=html
+
+# Run only unit tests (fast feedback)
+pytest tests/unit/ -v
+
+# Run integration tests (slower)
+pytest tests/integration/ -v
+
+# Run contract tests
+pytest tests/contract/ -v
+
+# Run specific module tests during development
+pytest tests/unit/distributions/test_laplace.py -v --cov=backtesting.distributions.laplace
+
+# Run property-based tests with more examples
+pytest tests/unit/ -v --hypothesis-show-statistics
+
+# Generate HTML coverage report
+pytest --cov=backtesting --cov-report=html
+# View: open htmlcov/index.html
+```
+
+### Test Fixtures and Helpers
+
+Create shared fixtures in `tests/conftest.py`:
+
+```python
+# tests/conftest.py
+import pytest
+import pandas as pd
+import numpy as np
+from pathlib import Path
+
+@pytest.fixture
+def sample_ohlcv():
+    """Returns realistic OHLCV DataFrame for testing."""
+    dates = pd.date_range('2023-01-01', periods=252, freq='D')
+    return pd.DataFrame({
+        'open': np.random.uniform(100, 110, 252),
+        'high': np.random.uniform(110, 120, 252),
+        'low': np.random.uniform(90, 100, 252),
+        'close': np.random.uniform(100, 110, 252),
+        'volume': np.random.randint(1e6, 10e6, 252),
+    }, index=dates)
+
+@pytest.fixture
+def temp_data_dir(tmp_path):
+    """Returns temporary directory for artifact testing."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    (data_dir / "historical").mkdir()
+    (data_dir / "features").mkdir()
+    return data_dir
+
+@pytest.fixture
+def mock_run_config():
+    """Returns valid RunConfig for testing."""
+    return RunConfig(
+        n_paths=100,
+        n_steps=60,
+        seed=42,
+        distribution_model='laplace',
+        data_source='yfinance'
+    )
+```
 
 ---
 
