@@ -1,6 +1,6 @@
 Specification Analysis Report
 ID	Category	Severity	Location(s)	Summary	Recommendation
-I1	Inconsistency	HIGH	plan.md:49-63; tasks.md:29-35; quickstart.md:66-68	Plan/quickstart assume package/root backtesting/ with Typer entrypoints under backtesting/cli, but tasks use quant-scenario-engine/{...} paths; directory trees differ (duplicate runs folder listed).	Align on one root layout (prefer plan’s backtesting/ per spec hierarchy), update tasks paths (and quickstart wording if needed) to match.
+
 C1	Coverage Gap	HIGH	spec.md:141 (FR-015); tasks.md (no mapping)	No task covers documenting/validating performance targets (FR-015).	Add a task to define/validate performance budgets (e.g., benchmarks + doc) and map it to FR-015/SC-001..003.
 C2	Coverage Gap	MEDIUM	spec.md:158-214 (DM-001..DM-014); tasks.md:T019,T030,T031	DM-series largely uncovered: only directory layout/storage threshold tasks exist; no tasks for resolution tiering, Parquet compression/versioning, or historical vs feature separation.	Add tasks to enforce DM-001..007 (resolution tiers, partitions, compression/versioning) and DM-012..014 policies (persistence conditions, memmap thresholds) in data ingest/storage tooling.
 T1	Terminology Drift	MEDIUM	quickstart.md:66-68; plan.md:49-63; tasks.md:29-35	Module naming drift: quickstart/plan refer to installing backtesting package, tasks use quant-scenario-engine namespace—risk of import/CLI confusion.	Standardize package name and CLI module path across docs/tasks; add a note or task to rename/mirror accordingly.

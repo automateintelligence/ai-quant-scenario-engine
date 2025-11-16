@@ -5,6 +5,8 @@
 
 **Tests**: Not explicitly requested in specification - implementing core functionality only per constitution principle (build only what spec requires)
 
+**DM-Series Coverage**: Added T020d-g to address gaps identified in Specification_Analysis_Report.md (DM-001/002/003 resolution tiers, DM-005 feature separation, DM-007 symbol tiers, DM-013 versioning). Existing tasks T019, T020, T020a-c, T030-031 cover remaining DM requirements.
+
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story per constitution-driven development (Principle XVII).
 
 ## Format: `[ID] [P?] [Story] Description`
@@ -19,6 +21,7 @@ Per plan.md structure:
 - **Source**: (quant-scenario-engine/{features,models,runs,schema,interfaces,backtesting/{distributions,mc},optimizer,pricing,strategies,simulation,cli,config}, 
 - **Tests**: `tests/` (unit, integration, contract)
 - **Artifacts**: `runs/`, `data/` (historical, features)
+- **Package name**: `backtesting` (aligned with plan.md and quickstart.md)
 
 ---
 
@@ -62,6 +65,10 @@ Per plan.md structure:
 - [ ] T020a Add Parquet schema validation and fingerprint computation in quant-scenario-engine/data/validation.py (DM-015, DM-016, FR-027, FR-028)
 - [ ] T020b Add missing-data tolerance enforcement (3× interval continuous gap, 1% total) and configurable imputation rules in data validation (FR-029, DM-017)
 - [ ] T020c Ensure run_meta writes are atomic/immutable and record persistence usage (FR-030, FR-031, DM-018)
+- [ ] T020d [P] Document resolution tier strategy (daily for distribution fitting, 5-min for backtesting, 1-min for live) and implement tier selection logic in data validation (DM-001, DM-002, DM-003)
+- [ ] T020e [P] Enforce raw OHLCV vs derived features separation in Parquet storage (data/historical/{interval}/ vs data/features/{interval}/) per DM-005
+- [ ] T020f [P] Add Parquet historical data versioning support (_v2, _v3 suffixes) and retention policy documentation per DM-013
+- [ ] T020g [P] Create Universe/Watchlist/Live Set configuration schema (symbol tiers: Universe=daily+5min, Watchlist=daily+5min+features, Live=all resolutions) per DM-007
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -547,7 +554,7 @@ With 3+ developers:
 | SC-010: Screen ≥100 symbols | T056-T058 (screening) | US4 |
 | SC-011: Unconditional vs conditional reporting | T067 (comparison) | US5 |
 | SC-012: Selector change without code | T052-T055 (selector), T091 (config) | US4 + US7 |
-| SC-013: Parquet schema consistency | T019 (structure), T023 (validation) | Foundation + US1 |
+| SC-013: Parquet schema consistency | T019 (structure), T020a (validation), T020f (versioning), T023 (data validation) | Foundation + US1 |
 | SC-014: Auto memmap fallback | T031 (memmap), T020 (policy) | Foundation + US1 |
 | SC-015: run_meta.json complete | T044 (run_meta), T108 (provenance) | US1 + US8 |
 | SC-016: Distribution swap changes behavior | T027 (factory), T093 (normal) | US1 + US7 |

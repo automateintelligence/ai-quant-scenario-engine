@@ -51,7 +51,7 @@ Parent: `plan.md` (derived from `spec.md` per constitution). References: `resear
   ```
 - Run: `python -m quant-scenario-engine.cli.grid --config configs/grid_aapl.yaml`
 
-5) **Candidate screening + conditional backtest/MC**
+5) **Candidate screening + conditional backtesting/MC**
 - `python -m quant-scenario-engine.cli.screen --universe configs/universe.yaml --selector configs/selector_gap.yaml --lookback 5y --top 20`
 - `python -m quant-scenario-engine.cli.conditional --symbol AAPL --selector configs/selector_gap.yaml --paths 1000 --steps 60 --seed 99`
 - Screening outputs `runs/<run_id>/candidates.json`; conditional run backtests only on those episodes and reports stock vs option metrics.
