@@ -47,23 +47,30 @@ specs/001-mvp-pipeline/
 ### Source Code (repository root)
 
 ```text
-backtesting/
-├── data/               # data source adapters (yfinance, Schwab stub, loaders)
-├── features/           # indicator + macro enrichment
-├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
-├── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
-├── pricing/            # option pricers (Black-Scholes default; alt pricers TBD)
-├── strategies/         # stock + option strategies, param schemas
-├── simulation/         # core simulator, grid runner, conditional episode logic
-└── cli/                # typer entrypoints for compare, grid, screening
-
-tests/
-├── unit/
-├── integration/        # CLI + data/pricer wiring + persistence paths
-└── contract/           # CLI/config/schema/contracts
+quant-scenario-engine/
+├── data/                   # data source adapters (yfinance, Schwab API, PyData loaders)
+├── features/               # indicator + macro enrichment
+├── schema/
+├── models/
+├── interfaces/
+├── runs/
+├── backtesting/
+|   ├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
+|   └── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
+├── optimizer/
+├── pricing/                # option pricers (Black-Scholes default; alt pricers Heston, TBD)
+├── strategies/             # stock + option strategies, param schemas
+├── simulation/             # core simulator, grid runner, conditional episode logic
+├── cli/                    # typer entrypoints for compare, grid, screening
+├── config/
+|     main.py
+├── tests/
+    ├── unit/
+    ├── integration/        # CLI + data/pricer wiring + persistence paths
+    └── contract/           # CLI/config/schema/contracts
 ```
 
-**Structure Decision**: Single-package layout rooted in `backtesting/` with sibling `tests/`; keeps CLI + engine co-located for fast iteration while preserving clear submodules for data, MC, pricers, strategies, and simulations.
+**Structure Decision**: Single-package layout rooted in `quant-scenario-engine/`; keeps CLI + engine co-located for fast iteration while preserving clear submodules for data, backtesting, MC, pricers, strategies, and simulations.
 
 ## Complexity Tracking
 
@@ -85,10 +92,10 @@ tests/
 - `backtesting.data`: `load_ohlcv(symbol, start, end, interval) -> DataFrame`; adapters `YFinanceSource`, `SchwabStub` chosen via config.
 - `backtesting.distributions`: `ReturnDistribution.fit(returns)`, `.sample(n_paths, n_steps, seed)`, models: Laplace (default), Student-T, optional GARCH-T flag (FR-002).
 - `backtesting.mc`: `generate_paths(dist, n_paths, n_steps, s0, seed, storage_policy)` with memmap/npz fallback (FR-013/DM-011).
-- `backtesting.pricing`: `OptionPricer.price(path_slice, option_spec)`; `BlackScholesPricer` default; `PyVollibPricer` optional; adapter slot for QuantLib/Heston later (FR-016).
+- `backtesting.pricing`: `OptionPricer.price(path_slice, option_spec)`; `BlackScholesPricer` default; `PyVollibPricer` optional; adapter slot for QuantLib/Heston 'HestonPricer' later(FR-016).
 - `backtesting.strategies`: `Strategy.generate_signals(price_paths, features, params) -> StrategySignals` (stock + option signals + OptionSpec); param schemas validated against `StrategyParams`.
 - `backtesting.simulation`: `run_compare`, `run_grid`, `run_conditional_backtest`, `run_conditional_mc`, all producing `SimulationRun` + artifacts.
-- `backtesting.cli`: Typer commands invoking above, enforcing config validation and run_meta persistence (FR-009, FR-019).
+- `quant-scenario-engine.cli`: Typer commands invoking above, enforcing config validation and run_meta persistence (FR-009, FR-019).
 
 ## Concurrency Model
 

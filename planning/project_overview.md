@@ -705,31 +705,26 @@ LLM / external analysis (later):
 Assume a Python package structure like:
 
 ```text
-quant_sys/
-  data/
-    data_source.py
-    schwab_source.py
-    yfinance_source.py
-    feature_engineering.py
-  models/
-    distributions.py
-    macro_factors.py
-    option_pricing.py
-    path_generator.py
-  strategy/
-    base.py
-    stock_strategies.py
-    option_strategies.py
-  backtesting/
-    simulator.py
-    metrics.py
-    reporting.py
-  optimize/
-    optimizer.py
-  config/
-    settings.py
-  cli/
-    main.py
+quant-scenario-engine/
+├── data/                   # data source adapters (yfinance, Schwab API, PyData loaders)
+├── features/               # indicator + macro enrichment
+├── schema/
+├── models/
+├── interfaces/
+├── runs/
+├── backtesting/
+|   ├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
+|   └── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
+├── optimizer/
+├── pricing/                # option pricers (Black-Scholes default; alt pricers Heston, TBD)
+├── strategies/             # stock + option strategies, param schemas
+├── simulation/             # core simulator, grid runner, conditional episode logic
+├── cli/                    # typer entrypoints for compare, grid, screening
+|     main.py
+├── tests/
+    ├── unit/
+    ├── integration/        # CLI + data/pricer wiring + persistence paths
+    └── contract/           # CLI/config/schema/contracts
 ```
 
 Below, I’ll outline key classes, methods, and signatures.
@@ -741,7 +736,7 @@ Below, I’ll outline key classes, methods, and signatures.
 ### 4.1 Data sources
 
 ```python
-# quant_sys/data/data_source.py
+# quant-scenario-engine/data/data_source.py
 from abc import ABC, abstractmethod
 import pandas as pd
 from datetime import datetime
@@ -779,7 +774,7 @@ class DataSource(ABC):
 Concrete implementations:
 
 ```python
-# quant_sys/data/schwab_source.py
+# quant-scenario-engine/data/schwab_source.py
 class SchwabDataSource(DataSource):
     def __init__(self, api_client):
         self.api_client = api_client
@@ -789,7 +784,7 @@ class SchwabDataSource(DataSource):
 ```
 
 ```python
-# quant_sys/data/yfinance_source.py
+# quant-scenario-engine/data/yfinance_source.py
 import yfinance as yf
 
 class YFinanceDataSource(DataSource):
@@ -804,7 +799,7 @@ You can set a **config** that chooses which data source to use (Schwab vs yfinan
 Use `pandas-ta` or `ta` to avoid re-inventing indicators:
 
 ```python
-# quant_sys/data/feature_engineering.py
+# quant-scenario-engine/data/feature_engineering.py
 import pandas as pd
 import pandas_ta as ta
 
@@ -837,7 +832,7 @@ def add_technical_indicators(
 You’re correct: you can either go event-driven or align to your main bar frequency.
 
 ```python
-# quant_sys/models/macro_factors.py
+# quant-scenario-engine/models/macro_factors.py
 import pandas as pd
 
 def align_macro_to_prices(
@@ -868,7 +863,7 @@ Later, you can build a small **event abstraction** if you want, but for now, ali
 Use SciPy and ARCH to fit distributions and optionally GARCH / stochastic volatility models.
 
 ```python
-# quant_sys/models/distributions.py
+# quant-scenario-engine/models/distributions.py
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy import stats
@@ -922,7 +917,7 @@ You can select which class to use via config.
 ### 5.2 Path generator
 
 ```python
-# quant_sys/models/path_generator.py
+# quant-scenario-engine/models/path_generator.py
 import numpy as np
 
 def generate_price_paths(
@@ -952,7 +947,7 @@ Approach:
 For your CPU-only MVP, use BS with **per-strike IV** as a strong baseline. That already fixes the biggest Black–Scholes sin (constant vol). Later you can plug in Heston via QuantLib if needed.
 
 ```python
-# quant_sys/models/option_pricing.py
+# quant-scenario-engine/models/option_pricing.py
 from abc import ABC, abstractmethod
 import numpy as np
 from dataclasses import dataclass
@@ -1008,7 +1003,7 @@ For **this application** (short-horizon, high-vol single names; MC paths you alr
 ### 6.1 Strategy interface
 
 ```python
-# quant_sys/strategy/base.py
+# quant-scenario-engine/strategy/base.py
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -1045,7 +1040,7 @@ For Monte Carlo, you can generalize to `(n_paths, n_steps)` by broadcasting the 
 Example simple strategy class:
 
 ```python
-# quant_sys/strategy/stock_strategies.py
+# quant-scenario-engine/strategy/stock_strategies.py
 class MeanReversionStockStrategy(Strategy):
     def generate_signals(self, prices, features, params):
         close = prices["close"].values
@@ -1062,7 +1057,7 @@ class MeanReversionStockStrategy(Strategy):
 Option counterpart:
 
 ```python
-# quant_sys/strategy/option_strategies.py
+# quant-scenario-engine/strategy/option_strategies.py
 from quant_sys.models.option_pricing import OptionSpec
 
 class CallOverlayStrategy(Strategy):
@@ -1087,7 +1082,7 @@ class CallOverlayStrategy(Strategy):
 Handles both **historical** and **simulated** price arrays.
 
 ```python
-# quant_sys/backtesting/simulator.py
+# simulator.py
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, Tuple
@@ -1179,7 +1174,7 @@ For Monte Carlo paths `(n_paths, n_steps)`, you can vectorize `simulate_stock` a
 ### 6.3 Metrics & reporting
 
 ```python
-# quant_sys/backtesting/metrics.py
+# metrics.py
 import pandas as pd
 import quantstats as qs
 
@@ -1220,7 +1215,7 @@ def generate_tearsheet(
 ## 7. Optimization Layer
 
 ```python
-# quant_sys/optimize/optimizer.py
+# quant-scenario-engine/optimizer/optimizer.py
 from typing import Dict, Any, Callable, List
 import itertools
 import numpy as np
@@ -1351,7 +1346,7 @@ I’ll assume a package name `quant_sys`.
 ## 1. Directory layout
 
 ```text
-quant_sys/
+quant-scenario-engine/
   __init__.py
 
   config/
@@ -1383,7 +1378,7 @@ quant_sys/
     simulator.py
     metrics.py
 
-  optimize/
+  optimizer/
     __init__.py
     optimizer.py
 
@@ -1399,7 +1394,7 @@ You can adapt names, but this is concrete enough to start.
 ## 2. `config/settings.py`
 
 ```python
-# quant_sys/config/settings.py
+# quant-scenario-engine/config/settings.py
 
 from dataclasses import dataclass
 
@@ -1435,7 +1430,7 @@ settings = Settings()
 ### 3.1 `data/data_source.py`
 
 ```python
-# quant_sys/data/data_source.py
+# quant-scenario-engine/data/data_source.py
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -1476,7 +1471,7 @@ class DataSource(ABC):
 ### 3.2 `data/yfinance_source.py`
 
 ```python
-# quant_sys/data/yfinance_source.py
+# quant-scenario-engine/data/yfinance_source.py
 
 from datetime import datetime
 import pandas as pd
@@ -1526,7 +1521,7 @@ class YFinanceDataSource(DataSource):
 ### 3.3 `data/schwab_source.py` (stub)
 
 ```python
-# quant_sys/data/schwab_source.py
+# quant-scenario-engine/data/schwab_source.py
 
 from datetime import datetime
 import pandas as pd
@@ -1563,7 +1558,7 @@ class SchwabDataSource(DataSource):
 ### 3.4 `data/feature_engineering.py`
 
 ```python
-# quant_sys/data/feature_engineering.py
+# quant-scenario-engine/data/feature_engineering.py
 
 import pandas as pd
 import pandas_ta as ta
@@ -1603,7 +1598,7 @@ def add_technical_indicators(
 ### 4.1 `models/macro_factors.py`
 
 ```python
-# quant_sys/models/macro_factors.py
+# quant-scenario-engine/models/macro_factors.py
 
 import pandas as pd
 
@@ -1633,7 +1628,7 @@ def align_macro_to_prices(
 ### 4.2 `models/distributions.py`
 
 ```python
-# quant_sys/models/distributions.py
+# quant-scenario-engine/models/distributions.py
 
 from abc import ABC, abstractmethod
 import numpy as np
@@ -1686,7 +1681,7 @@ class GARCHStudentTDistribution(ReturnDistribution):
 ### 4.3 `models/path_generator.py`
 
 ```python
-# quant_sys/models/path_generator.py
+# quant-scenario-engine/models/path_generator.py
 
 import numpy as np
 from .distributions import ReturnDistribution
@@ -1709,7 +1704,7 @@ def generate_price_paths(
 ### 4.4 `models/option_pricing.py`
 
 ```python
-# quant_sys/models/option_pricing.py
+# quant-scenario-engine/models/option_pricing.py
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -1774,7 +1769,7 @@ class BlackScholesPricer(OptionPricer):
 ### 5.1 `strategy/base.py`
 
 ```python
-# quant_sys/strategy/base.py
+# quant-scenario-engine/strategy/base.py
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -1808,7 +1803,7 @@ class Strategy(ABC):
 ### 5.2 `strategy/stock_strategies.py`
 
 ```python
-# quant_sys/strategy/stock_strategies.py
+# quant-scenario-engine/strategy/stock_strategies.py
 
 from typing import Dict, Any
 import numpy as np
@@ -1842,7 +1837,7 @@ class MeanReversionStockStrategy(Strategy):
 ### 5.3 `strategy/option_strategies.py`
 
 ```python
-# quant_sys/strategy/option_strategies.py
+# quant-scenario-engine/strategy/option_strategies.py
 
 from typing import Dict, Any
 import numpy as np
@@ -1891,10 +1886,10 @@ class MeanReversionCallStrategy(Strategy):
 
 ## 6. Backtesting layer
 
-### 6.1 `backtesting/simulator.py`
+### 6.1 `simulator.py`
 
 ```python
-# quant_sys/backtesting/simulator.py
+# simulator.py
 
 from typing import Dict, Any
 import numpy as np
@@ -1971,10 +1966,10 @@ class MarketSimulator:
         return results
 ```
 
-### 6.2 `backtesting/metrics.py`
+### 6.2 `metrics.py`
 
 ```python
-# quant_sys/backtesting/metrics.py
+# metrics.py
 
 from typing import Dict
 import pandas as pd
@@ -2007,7 +2002,7 @@ def generate_tearsheet(
 ## 7. Optimization (stub)
 
 ```python
-# quant_sys/optimize/optimizer.py
+# quant-scenario-engine/optimizer/optimizer.py
 
 from typing import Dict, Any, Callable, List
 import itertools
@@ -2039,7 +2034,7 @@ def grid_search(
 This is the “end-to-end” script: load data, compute features, fit distribution, generate paths, run two strategies, simulate, compare.
 
 ```python
-# quant_sys/cli/main.py
+# quant-scenario-engine/cli/main.py
 
 import argparse
 from datetime import datetime
