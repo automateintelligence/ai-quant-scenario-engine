@@ -128,6 +128,37 @@ Author can inspect a run directory and reconstruct exactly how results were prod
 - **FR-002**: System MUST fit Laplacian (double-exponential) returns as the default heavy-tailed model and generate N Monte Carlo paths of length T from that fit; additional models (e.g., Student-T) MAY be provided as alternatives.
 - **FR-003**: System MUST run a stock strategy over generated paths, producing per-path equity curves and summary metrics (mean/median P&L, drawdown, VaR/CVaR, Sharpe/Sortino).
 - **FR-004**: System MUST run an option strategy over the same paths using an option pricer (Black-Scholes with configurable IV) and produce analogous metrics.
+```python
+# engine/simulator.py
+
+import numpy as np
+import pandas as pd
+
+class MarketSimulator:
+    """Executes stock and option P&L given price paths and position arrays."""
+
+    def simulate_stock(self, close: pd.Series, position: np.ndarray) -> pd.Series:
+        px = close.values
+        pnl = np.zeros_like(px)
+        pnl[1:] = position[:-1] * (px[1:] - px[:-1])
+        return pd.Series(np.cumsum(pnl), index=close.index)
+
+    def simulate_option(
+        self,
+        close: pd.Series,
+        position: np.ndarray,
+        pricer,
+        spec,
+    ) -> pd.Series:
+        px = close.values.astype(float)
+        n = len(px)
+        ttm = np.maximum(spec.maturity_days - np.arange(n), 1) / 252.0
+        opt_px = pricer.price(px, spec, ttm)
+
+        pnl = np.zeros_like(opt_px)
+        pnl[1:] = position[:-1] * (opt_px[1:] - opt_px[:-1])
+        return pd.Series(np.cumsum(pnl), index=close.index)
+```
 - **FR-005**: System MUST expose a CLI to execute the stock-vs-option comparison with configurable symbol, date range, distribution, paths, steps, and strategy parameters.
 - **FR-006**: System MUST support feature/indicator injection (e.g., SMA/RSI via pandas-ta) without modifying strategy engine code.
 - **FR-007**: System MUST support parameter grid/batch execution with parallelization and return an objective score per configuration.
@@ -136,15 +167,48 @@ Author can inspect a run directory and reconstruct exactly how results were prod
 - **FR-010**: System MUST handle missing data gracefully with clear warnings and deterministic fallbacks (e.g., drop NaNs, fail-fast if below minimum length).
 - **FR-011**: System MUST provide stubs for Schwab API data and advanced pricers while defaulting to yfinance + BS so the MVP runs locally.
 - **FR-012**: System MUST allow deterministic seeding of random number generation for reproducible simulations.
-- **FR-013**: System SHOULD cap Monte Carlo sampling to avoid memory exhaustion and provide user feedback when limits are exceeded.  
-- **FR-014**: System SHOULD support macro/alternative series alignment (e.g., interpolation to bar frequency) for use as features.  
+- **FR-013**: System SHOULD cap Monte Carlo sampling based on estimated footprint `n_paths * n_steps * 8 bytes` and refuse in-memory runs above **25% of available RAM**, automatically switching to memmap/npz and emitting a warning.  
+- **FR-014**: System SHOULD support macro/alternative series alignment (e.g., interpolation to bar frequency) with explicit tolerances: maximum forward/backfill gap of **3× bar interval** and warning when alignment error exceeds tolerance.  
 - **FR-015**: System SHOULD document performance targets (paths × steps per second) for the CPU-only VPS.
 - **FR-016**: System MUST support Black–Scholes pricing with per-strike implied volatility as the default option pricer, and MUST allow swapping in more advanced pricers (e.g., Heston/QuantLib) via configuration without changes to strategy or backtest code.
+```python
+# models/options.py
+
+from dataclasses import dataclass
+import numpy as np
+from scipy.stats import norm
+
+@dataclass
+class OptionSpec:
+    kind: str            # 'call' or 'put'
+    strike: float
+    maturity_days: int
+    implied_vol: float
+    risk_free_rate: float = 0.02  # configurable
+
+class BlackScholesPricer:
+    def price(self, spot, spec, ttm):
+        S = np.asarray(spot, float)
+        K = spec.strike
+        vol = spec.implied_vol
+        r = spec.risk_free_rate
+        sqrt_t = np.sqrt(ttm)
+
+        d1 = (np.log(S/K) + (r + 0.5*vol**2)*ttm) / (vol*sqrt_t)
+        d2 = d1 - vol*sqrt_t
+
+        if spec.kind == "call":
+            return S * norm.cdf(d1) - K * np.exp(-r*ttm) * norm.cdf(d2)
+        else:
+            return K * np.exp(-r*ttm) * norm.cdf(-d2) - S * norm.cdf(-d1)
+```
+
 - **FR-017**: System MUST support both yfinance and Schwab API as historical data providers, using yfinance as the default source for development and allowing promotion of Schwab to primary source via configuration, with automatic fallback to yfinance if the primary source fails.
 - **FR-018**: System MUST define and enforce configurable run time and resource limits for grid jobs on the VPS, with the initial defaults that:
   - A single baseline CLI run (e.g., 1,000 paths × 60 steps for one config) SHOULD complete in ≤ 10 seconds on the target VPS.
   - A grid job (e.g., up to 50 configurations with 1,000 paths × 60 steps each) SHOULD complete in ≤ 15 minutes wall-clock time.
-  - The system MUST cap concurrent workers (e.g., max_workers ≤ 6 on an 8-core VPS) and abort or refuse new jobs when estimated workload exceeds configured thresholds, emitting a clear warning.
+  - The system MUST cap concurrent workers (e.g., max_workers ≤ 6 on an 8-core VPS) and abort the run (with structured error) when pre-run estimates exceed thresholds; if estimates are within limits but runtime exceeds, emit escalating warnings and stop remaining jobs.
+- **FR-019**: System MUST prevent replay when underlying historical data version has changed since `run_meta` (unless an explicit `--force-replay`/`allow_data_drift` flag is provided), and must record the drift status in the replay output.
 
 # **Candidate Selection Functional Requirements**
 - **FR-CAND-001:** System SHALL implement a `CandidateSelector` abstraction that produces candidate timestamps based solely on information available at time t.
@@ -152,6 +216,69 @@ Author can inspect a run directory and reconstruct exactly how results were prod
 - **FR-CAND-003:** System SHALL support “conditional backtests,” where strategies are evaluated only on candidate episodes and performance metrics are computed at the episode level.
 - **FR-CAND-004:** System SHALL support “conditional Monte Carlo” that generates simulated price paths conditioned on the current state being similar to historical candidate episodes.
 - **FR-CAND-005:** System SHOULD support at least one non-parametric episode-resampling method and one parametric state-conditioned return model.
+- **FR-CAND-006:** System MUST ship at least one default selector (gap/volume spike rule) for MVP and allow selector swapping via configuration without code changes.
+
+```python
+# interfaces/candidate_selector.py
+
+from abc import ABC, abstractmethod
+import pandas as pd
+
+class CandidateSelector(ABC):
+    """Determines whether a symbol is in a 'candidate' state at each timestamp."""
+
+    @abstractmethod
+    def score(self, features: pd.DataFrame) -> pd.Series:
+        """
+        Return a float score per timestamp indicating strength of candidate signal.
+        Higher is more likely to be a candidate.
+        """
+
+    @abstractmethod
+    def select(self, features: pd.DataFrame, threshold: float) -> pd.Series:
+        """
+        Return boolean Series: True where the candidate condition is met.
+        """
+```
+
+```python
+# modules/episodes.py
+
+from dataclasses import dataclass
+import pandas as pd
+
+@dataclass
+class CandidateEpisode:
+    symbol: str
+    t0: pd.Timestamp
+    prices: pd.DataFrame
+    features: pd.DataFrame
+    state_features: pd.Series
+
+def build_candidate_episodes(
+    symbol: str,
+    prices: pd.DataFrame,
+    features: pd.DataFrame,
+    selector,
+    horizon: int,
+):
+    selected = selector.select(features, threshold=selector.threshold)
+    episodes = []
+
+    for t0 in selected[selected].index:
+        window = slice(t0, t0 + pd.Timedelta(days=horizon))
+        episodes.append(
+            CandidateEpisode(
+                symbol=symbol,
+                t0=t0,
+                prices=prices.loc[window],
+                features=features.loc[window],
+                state_features=features.loc[t0],
+            )
+        )
+
+    return episodes
+```
 
 # **Data Management Functional Requirements (DM-Series)**
 
@@ -291,7 +418,7 @@ The system SHALL guarantee reproducibility of Monte Carlo runs using:
 
 ### Monte Carlo & Conditional Backtesting Success Criteria
 * **SC-007**: For a fixed symbol and configuration, Monte Carlo runs with the same seed and parameters produce identical path-level outcomes and episode-level metrics across at least 3 repeated runs.
-* **SC-008**: The system can run a conditional backtest over at least 100 historical candidate episodes for a single symbol and complete within the documented time budget (to be defined in FR-0xx).
+* **SC-008**: The system can run a conditional backtest over at least 100 historical candidate episodes for a single symbol and complete within the documented time budget (per FR-018).
 * **SC-009**: For a given strategy, the system can produce and persist a comparative risk–return summary (e.g., mean P&L, CVaR, max drawdown) for stock vs option variants, conditioned only on candidate episodes, in a single CLI command.
 
 ### Candidate Selection & Episodic Evaluation Success Criteria
@@ -313,3 +440,18 @@ The system SHALL guarantee reproducibility of Monte Carlo runs using:
 * **SC-019**: When distribution fitting fails (e.g., insufficient data, non-convergence), the system logs a structured error explaining the cause, aborts the run gracefully, and exits with a non-zero status code.
 * **SC-020**: When data gaps or missing values exceed a configurable tolerance, the system emits explicit warnings and either (a) drops affected episodes or (b) imputes as configured, recording the choice in the run metadata.
 * **SC-021**: Each run directory contains sufficient logs (timestamps, parameters, progress markers) to trace which configurations were evaluated and in what order, enabling post-mortem analysis of grid or batch runs.
+
+## Clarifications & Anti-Requirements
+
+- **Conditional Backtesting vs Conditional Monte Carlo**: Conditional backtesting replays historical episodes where a selector fired; conditional MC resamples/parameterizes returns conditioned on the same state and then simulates synthetic paths. Both must share selector definitions but produce different artifacts (historical metrics vs simulated distributions).
+- **Anti-requirements**: MVP will not execute live trades, will not require GPUs, and will not store brokerage credentials in-repo; all runs are research-only.
+
+## Glossary (shared across plan/data-model)
+
+- **candidate**: A symbol + timestamp emitted by a selector rule.
+- **candidate episode**: `(symbol, t0, horizon, state_features)` slice derived from a candidate for evaluation.
+- **conditional backtest**: Historical replay limited to candidate episodes.
+- **conditional MC**: Monte Carlo paths generated from state-conditioned returns/bootstraps matching candidate state.
+- **unconditional MC**: Monte Carlo paths from a model fitted on the full chosen window without conditioning.
+- **run**: A single execution of compare/grid/conditional producing artifacts under `runs/<run_id>/`.
+- **grid**: A batch of strategy configurations evaluated in parallel.

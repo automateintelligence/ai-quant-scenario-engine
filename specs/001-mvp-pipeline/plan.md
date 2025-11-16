@@ -72,6 +72,57 @@ tests/
 |-----------|------------|-------------------------------------|
 | None | N/A | N/A |
 
+## Phases and Outputs (alignment with /speckit workflow)
+
+- **Phase 0 (Research)**: Decision log captured in `research.md` (option pricer interface per FR-016, data sourcing per FR-017, MC storage per FR-013), unresolved clarifications flagged. Gate: constitution compliance + clarified unknowns.
+- **Phase 1 (Design & Contracts)**: Artifacts `data-model.md`, `contracts/openapi.yaml`, `quickstart.md`; explicit interfaces (below) and config/CLI schemas; re-run constitution check.
+- **Phase 2 (Implementation planning)**: `/speckit.tasks` to derive ordered tasks; wire Typer CLIs (`compare`, `grid`, `screen`, `conditional`, `replay`), add tests and resource guards.
+- **Architecture Diagram**: Generate a simple flow (DataSource → Distribution → MC → Strategies → Simulation → Metrics/artifacts) to live alongside `plan.md` (image or Mermaid) for onboarding.
+
+## Interfaces & Public Functions (per module)
+
+- `backtesting.data`: `load_ohlcv(symbol, start, end, interval) -> DataFrame`; adapters `YFinanceSource`, `SchwabStub` chosen via config.
+- `backtesting.distributions`: `ReturnDistribution.fit(returns)`, `.sample(n_paths, n_steps, seed)`, models: Laplace (default), Student-T, optional GARCH-T flag (FR-002).
+- `backtesting.mc`: `generate_paths(dist, n_paths, n_steps, s0, seed, storage_policy)` with memmap/npz fallback (FR-013/DM-011).
+- `backtesting.pricing`: `OptionPricer.price(path_slice, option_spec)`; `BlackScholesPricer` default; `PyVollibPricer` optional; adapter slot for QuantLib/Heston later (FR-016).
+- `backtesting.strategies`: `Strategy.generate_signals(price_paths, features, params) -> StrategySignals` (stock + option signals + OptionSpec); param schemas validated against `StrategyParams`.
+- `backtesting.simulation`: `run_compare`, `run_grid`, `run_conditional_backtest`, `run_conditional_mc`, all producing `SimulationRun` + artifacts.
+- `backtesting.cli`: Typer commands invoking above, enforcing config validation and run_meta persistence (FR-009, FR-019).
+
+## Concurrency Model
+
+- Use `concurrent.futures.ProcessPoolExecutor` (default max_workers=6 on 8 vCPU) for grid evaluations; single-process vectorized NumPy/Numba for path generation.
+- Per FR-018, preflight resource estimator aborts when predicted time/memory > thresholds; long-running jobs emit warnings and stop remaining tasks.
+
+## Error Handling Policies (map to SC-019..SC-021)
+
+- Structured exceptions: `DistributionFitError`, `DataSourceError`, `ResourceLimitError`, `PricingError`, `EpisodeGenerationError` with actionable messages.
+- Fail-fast on invalid configs/data gaps; log warnings for recoverable cases (fallback data source, selector with insufficient episodes triggers unconditional MC fallback + warning).
+- Each run writes `run_meta.json` + logs for traceability; replay refused on data drift unless forced (FR-019).
+
+## Performance Budget (targets for validation)
+
+| Path/Step Budget | Metric | Target |
+|------------------|--------|--------|
+| Baseline compare (1k×60) | wall time | ≤10s on 8 vCPU VPS |
+| Grid (≤50 configs, 1k×60) | wall time | ≤15m |
+| Laplace/Student-T fit | runtime | ≤1s per symbol window |
+| MC generation | throughput | ≥50k steps/s aggregate |
+| Memory | footprint | <25% RAM in-memory; auto memmap beyond |
+
+## Risk Mitigation
+
+- **Data gaps/schema drift**: schema validation on load; versioned Parquet; downgrade/skip with warnings (FR-010, DM-series).
+- **Distribution instability**: parameter sanity checks + fallback to Laplace when fits fail; seed persistence for reproducibility.
+- **OOM / resource overrun**: estimator enforces FR-013/FR-018 thresholds; memmap chunking; worker cap.
+- **Selector sparsity**: minimum episode threshold; fallback to unconditional MC with warning.
+
+## Onboarding & Workflow
+
+- Branch model: work on `001-mvp-pipeline`; PRs require spec alignment, tests, lint/type checks (black/ruff/mypy), constitution check.
+- Preferred tooling: `python -m venv .venv`, `pip install -r requirements-dev.txt` (to be added); `pytest` for tests; `ruff` + `mypy` gating CI.
+- Contracts in `specs/001-mvp-pipeline/contracts/` are source of truth for CLI/config validation; update alongside code changes.
+
 
 ## Phases & Milestones
 
