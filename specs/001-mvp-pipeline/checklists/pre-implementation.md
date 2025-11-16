@@ -55,7 +55,7 @@
 ### Monte Carlo Correctness
 
 - [x] CHK026 - Is "reproducible simulation" quantified beyond just seed matching (environment, library versions, numerical precision)? [Clarity, Spec §FR-012]
-- [x] CHK027 - Is "heavy-tailed" quantified with specific tail index or kurtosis requirements for distribution validation? [Ambiguity, Spec §FR-002]
+- [ ] CHK027 - Is "heavy-tailed" quantified with specific tail index or kurtosis requirements for distribution validation? [Ambiguity, Spec §FR-002]
 - [x] CHK028 - Are "implausible parameters" defined with specific threshold values for each distribution model? [Ambiguity, related to edge cases in spec.md line 119]
 - [x] CHK029 - Is the storage policy decision logic (<25% RAM → memory, ≥25% → memmap) specified with RAM detection method? [Clarity, Spec §FR-013/DM-008]
 
@@ -68,7 +68,7 @@
 ### Data Integrity
 
 - [ ] CHK033 - Is "data drift" quantified with specific metrics (schema changes, value distribution shifts, row count deltas)? [Clarity, Spec §FR-019]
-- [x] CHK034 - Is "insufficient data" defined with specific minimum bar counts per use case (fit: 60, backtest: 252, screen: 5 years)? [Ambiguity, multiple references in spec but not unified]
+- [ ] CHK034 - Is "insufficient data" defined with specific minimum bar counts per use case (fit: 60, backtest: 252, screen: 5 years)? [Ambiguity, multiple references in spec but not unified]
 - [ ] CHK035 - Are "NaN handling" requirements specified with priority order (drop, forward-fill, backward-fill, abort)? [Gap, Spec §FR-010 mentions "deterministic fallbacks" but not the order]
 - [ ] CHK036 - Is "source version" defined with format specification (semantic version, git SHA, ISO date)? [Gap, referenced in data-model.md DataSource but format undefined]
 
@@ -145,13 +145,13 @@
 - [x] CHK069 - Are requirements defined for data loading failures (missing symbols, network timeout, corrupted Parquet)? [Coverage, Exception Flow]
 - [x] CHK070 - Are requirements defined for resource exhaustion scenarios (OOM, disk full, process limit exceeded)? [Coverage, Exception Flow, related to FR-013/FR-018]
 - [x] CHK071 - Are requirements defined for configuration error scenarios (invalid YAML, missing required fields, type mismatches)? [Coverage, Exception Flow]
-- [x] CHK072 - Are requirements defined for option pricing failures (negative prices, maturity < horizon, IV out of bounds)? [Coverage, Exception Flow, edge case line 120]
+ - [ ] CHK072 - Are requirements defined for option pricing failures (negative prices, maturity < horizon, IV out of bounds)? [Coverage, Exception Flow, edge case line 120]
 
 ### Recovery Flow Coverage
 
 - [x] CHK073 - Are requirements defined for distribution fit fallback to default model (when Student-T fails → Laplace)? [Coverage, Recovery Flow, related to data-model.md]
 - [x] CHK074 - Are requirements defined for data source fallback behavior (Schwab fails → yfinance)? [Coverage, Recovery Flow, Spec §FR-017]
-- [ ] CHK075 - Are requirements defined for selector sparsity fallback (insufficient episodes → unconditional MC with warning)? [Coverage, Recovery Flow, related to plan.md risk mitigation]
+ - [ ] CHK075 - Are requirements defined for selector sparsity fallback (insufficient episodes → unconditional MC with warning)? [Coverage, Recovery Flow, related to plan.md risk mitigation]
 - [ ] CHK076 - Are requirements defined for grid job partial failure recovery (some configs fail → continue with remaining)? [Gap, Recovery Flow]
 - [x] CHK077 - Are requirements defined for replay data drift handling (block by default, proceed with --allow_data_drift)? [Coverage, Recovery Flow, Spec §FR-019]
 
@@ -191,7 +191,7 @@
 
 - [ ] CHK094 - Are requirements defined for max_workers = 1 (sequential execution) and max_workers > available CPUs? [Gap, Boundary Condition]
 - [ ] CHK095 - Are requirements defined for grid with single config (degenerates to compare)? [Gap, Boundary Condition]
-- [x] CHK096 - Are requirements defined for option maturity exactly equal to simulation horizon? [Coverage, Boundary Condition, edge case line 120]
+- [ ] CHK096 - Are requirements defined for option maturity exactly equal to simulation horizon? [Coverage, Boundary Condition, edge case line 120]
 - [ ] CHK097 - Are requirements defined for strike = current price (ATM) numerical precision? [Gap, Boundary Condition]
 
 ---
@@ -210,7 +210,7 @@
 - [x] CHK102 - Are logging requirements defined with log levels, structured format, and required fields per event? [Completeness, Plan mentions structured JSON but not in requirements]
 - [x] CHK103 - Are requirements defined for progress reporting during long-running operations (grid, screen)? [Gap, Observability]
 - [x] CHK104 - Are requirements defined for diagnostic output when performance budgets are exceeded? [Gap, Observability, related to FR-018]
-- [x] CHK105 - Are requirements defined for audit trail completeness (user, timestamp, action, outcome, duration)? [Gap, Observability]
+- [ ] CHK105 - Are requirements defined for audit trail completeness (user, timestamp, action, outcome, duration)? [Gap, Observability]
 
 ### Reliability Requirements
 
@@ -230,7 +230,7 @@
 
 ### External Dependencies
 
-- [x] CHK112 - Are requirements defined for yfinance API failure modes and retry behavior? [Gap, Dependency]
+- [ ] CHK112 - Are requirements defined for yfinance API failure modes and retry behavior? [Gap, Dependency]
 - [ ] CHK113 - Are requirements defined for pandas-ta indicator availability and fallback when indicators missing? [Gap, Dependency]
 - [ ] CHK114 - Are requirements defined for scipy/numpy version compatibility and numerical precision? [Gap, Dependency]
 - [ ] CHK115 - Are requirements defined for VPS OS and Python version constraints? [Completeness, Plan mentions Python 3.11 but not in requirements]
@@ -282,7 +282,7 @@
 - [ ] CHK135 - Does every functional requirement (FR-001 through FR-019 + FR-CAND-001 through FR-CAND-006) map to at least one success criterion? [Traceability]
 - [ ] CHK136 - Does every data management requirement (DM-001 through DM-014) map to implementation tasks? [Traceability, Gap between DM and tasks.md]
 - [ ] CHK137 - Does every user story acceptance scenario map to testable success criteria? [Traceability, Spec §US1-US8]
-- [x] CHK138 - Does every edge case mentioned in spec.md (lines 117-123) map to requirements or acceptance criteria? [Traceability, Edge Cases]
+- [ ] CHK138 - Does every edge case mentioned in spec.md (lines 117-123) map to requirements or acceptance criteria? [Traceability, Edge Cases]
 
 ### Reproducibility Requirements
 
@@ -329,15 +329,8 @@
 
 ## Next Steps
 
-1. **Review Priority**: Address CHK items in this order:
-   - Risk Area A (Monte Carlo): CHK001-CHK007, CHK026-CHK029, CHK081-CHK085
-   - Risk Area B (Configuration): CHK008-CHK013, CHK030-CHK032
-   - Risk Area D (Data): CHK014-CHK020, CHK033-CHK036
-
-2. **Gap Resolution**: Items marked [Gap] (47 total) require new requirements to be added to spec.md
-
-3. **Ambiguity Clarification**: Items marked [Ambiguity] (18 total) require existing requirements to be quantified/clarified
-
-4. **Conflict Resolution**: Items marked [Conflict] or [Conflict Check] (4 total) require alignment between documents
-
-5. **Validation**: Once gaps filled, re-run checklist to verify completeness before T001 implementation starts
+1. **Close highest-risk requirement gaps/ambiguities in spec.md**: MC/data/config clarity items (CHK027, CHK030-036, CHK037-040, CHK051, CHK055) plus option-pricing failure handling (CHK072) and objective/perf definitions. Add explicit metrics/tolerances, wiring, NaN ordering, drift metrics, and performance measurement methodology.
+2. **Define recovery/edge/boundary behaviors**: Specify fallbacks and limits for selector sparsity and partial grid failures (CHK075-076), small/degenerate/path/ATM/maturity edge cases (CHK082, CHK084-085, CHK086-088, CHK090-093, CHK094-095, CHK097), cross-VPS performance (CHK079), and audit trail completeness (CHK105).
+3. **Document dependencies and assumptions**: Add yfinance/pandas-ta/numpy-scipy compatibility and retry policies (CHK112-114), OS/Python pinning (CHK115), task ordering and directories/packages prerequisites (CHK116-118), single-user/data-preloaded assumptions (CHK121-122), and resolve max_workers contracts misalignment (CHK131).
+4. **Strengthen traceability and reproducibility**: Map FR/DM/US to success criteria and tasks (CHK135-137), cover all edge cases (CHK138), capture git SHA and system config in run_meta (CHK139, CHK141-142), and add change-management/versioning/migration requirements (CHK143-145).
+5. **Re-run this checklist** once the above updates are made to confirm readiness for T001 implementation.
