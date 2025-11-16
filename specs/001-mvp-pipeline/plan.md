@@ -12,15 +12,14 @@ MVP delivers a CPU-only Quant Scenario Engine that ingests historical OHLCV, fit
 ## Technical Context
 
 **Language/Version**: Python 3.11 (CPU-only VPS)  
-**Primary Dependencies**: numpy, pandas, scipy, numba, statsmodels/arch (fat-tail fits), pandas-ta (indicators), quantstats/plotly for reporting, yfinance (default data), Schwab API stub, CLI via typer; advanced option pricer backend **NEEDS CLARIFICATION (QuantLib vs custom/Heston)**  
-**Storage**: Parquet for canonical OHLCV/features; `.npz` or `numpy.memmap` for MC when exceeding RAM thresholds; run metadata as JSON; configs via YAML/CLI env  
-**Testing**: pytest + hypothesis-style property tests for distributions; contract tests for CLI/API surfaces; coverage target ≥80% per constitution  
-**Target Platform**: Linux VPS (8 vCPU, 24 GB RAM), no GPU  
-**Project Type**: Single-package research/CLI toolchain  
-**Performance Goals**: Baseline CLI (1k paths × 60 steps) ≤10s; grid up to ~50 configs ≤15m; MC memory <25% RAM in-memory or memmap fallback; reproducible seeded runs  
-**Constraints**: CPU-only; avoid >50% RAM for MC arrays; robustness to missing data; deterministic seeds; must fail fast on invalid configs; option pricer accuracy vs speed trade-off **NEEDS CLARIFICATION**  
-**Scale/Scope**: Single user; screen ≥100 symbols daily; 5–20 live symbols; up to thousands of MC paths per run; batch grids up to ~50 configs
-
+**Primary Dependencies**: numpy, pandas, scipy, numba, statsmodels/arch (fat-tail fits), pandas-ta (technical indicators), quantstats/plotly for reporting, yfinance (default data), Schwab API stub, CLI via typer; option pricer layer using Black–Scholes with per-strike implied volatility by default, with support for advanced pricers (e.g., Heston/QuantLib) via configuration.  
+**Storage**: Parquet for canonical OHLCV/features; `.npz` or `numpy.memmap` for Monte Carlo arrays that exceed in-memory thresholds; run metadata as JSON (or YAML); configs via YAML/CLI/env.  
+**Testing**: pytest + property-based tests (where useful) for distributions; contract tests for CLI/config/schema; coverage target ≥80% per constitution.  
+**Target Platform**: Linux VPS (8 vCPU, 24 GB RAM), no GPU.  
+**Project Type**: Single-package research/CLI toolchain.  
+**Performance Goals**: Baseline CLI (1,000 paths × 60 steps for one config) SHOULD complete in ≤10s on the target VPS; grid runs up to ~50 configs SHOULD complete in ≤15m; Monte Carlo memory usage SHOULD stay under ~25% of RAM when in-memory, otherwise fall back to `.npz`/memmap with clear logging.  
+**Constraints**: CPU-only; avoid >50% RAM for Monte Carlo arrays; robust to missing data; deterministic seeded runs; fail fast on invalid configs; option pricer accuracy vs speed is controlled via configuration (Black–Scholes+IV as default; advanced pricers opt-in).  
+**Scale/Scope**: Single user; screen ≥100 symbols daily; 5–20 live symbols; up to thousands of Monte Carlo paths per run; batch grids up to ~50 configs.
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
@@ -72,3 +71,124 @@ tests/
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | None | N/A | N/A |
+
+
+## Phases & Milestones
+
+**Phase 0 – Research & Architecture Decisions**  
+- Finalize distribution/pricing choices (e.g., Laplace vs Student-T; Black–Scholes default vs advanced pricers).  
+- Lock data storage policy (Parquet + `.npz`/memmap) and run provenance requirements.  
+- Produce `research.md` and initial architecture notes (this plan, data-model, quickstart sketches).
+
+**Phase 1 – Core Engine Skeleton (MVP)**  
+- Implement data layer (yfinance adapter, Parquet loaders, feature engineering) and RunConfig schema.  
+- Implement distribution interfaces and at least two concrete models (Normal, Laplace or Student-T).  
+- Implement Monte Carlo engine, stock/option strategy interfaces, and MarketSimulator for a single symbol.  
+- Implement basic CLI for “stock vs option comparison” using seeded runs and writing run artifacts.
+
+**Phase 2 – Conditional Episodes, Grids, and Screening**  
+- Implement CandidateSelector abstraction and candidate episode builder.  
+- Implement conditional backtesting and (at least one) conditional Monte Carlo method.  
+- Implement grid runner for parameter exploration and stock screening CLI for a universe of symbols.  
+- Harden error-handling, resource limits, and reproducibility (replay) in line with spec and success criteria.
+
+Future phases may extend to more advanced pricers, additional distribution models, and portfolio-level strategies once MVP is stable.
+
+## Concurrency & Resource Management
+
+- Concurrency will be implemented via Python's `concurrent.futures` (thread or process pool) with a configurable `max_workers` (default ≤6 on the 8-core VPS).  
+- Grid jobs will use task-level parallelism (different parameter configs as independent tasks) while keeping Monte Carlo path generation vectorized inside each task.  
+- Resource limits will be enforced by:
+  - Estimating memory needs based on `n_paths × n_steps × n_fields × 8 bytes` and comparing to configured RAM thresholds.  
+  - Capping path counts or refusing jobs when estimated usage exceeds configured limits (FR-013, FR-018).  
+  - Logging warnings and failing fast when jobs would exceed runtime or memory budgets.
+
+## Error Handling & Observability
+
+- Define explicit exception classes (e.g., `DataSourceError`, `DistributionFitError`, `PricingError`, `ResourceLimitError`, `EpisodeGenerationError`) and raise them from the appropriate layers.  
+- Ensure CLIs:
+  - Exit with non-zero status on unrecoverable errors.  
+  - Emit structured error messages (including symbol, run_id, component, and cause).  
+- Logging:
+  - Use a standard logging configuration (e.g., Python `logging` with INFO/DEBUG levels) and write logs into each run directory alongside metrics and metadata.  
+  - Record key events: data loading, model fits, MC generation, simulation progress, grid job status.
+
+## Performance Budget
+
+The following table captures initial performance targets for the MVP on the CPU-only VPS:
+
+| Operation                                 | Target (approx)                  | Notes                                      |
+|-------------------------------------------|----------------------------------|--------------------------------------------|
+| Single run (1,000 paths × 60 steps)       | ≤ 10 seconds                     | Includes data load, fit, MC, strategies    |
+| Grid run (≤ 50 configs, same scale)       | ≤ 15 minutes                     | With `max_workers` tuned for 8 vCPU        |
+| Distribution fit (per model, per symbol)  | ≤ 1 second (Normal/Laplace)      | Heavier models (e.g., GARCH) are optional  |
+| Run artifact write (metrics/metadata)     | ≤ 1 second per run               | Parquet/JSON writes amortized              |
+
+These budgets are guidance for implementation and testing; they can be refined after profiling but MUST remain documented so SC-001–SC-003 are objectively testable.
+
+## Reference Interfaces & Code Snippets (Non-normative)
+
+The following reference snippets are non-normative but illustrate expected interfaces and shapes for key components.
+
+### Monte Carlo Path Generator
+
+```python
+# engine/mc.py
+
+import numpy as np
+
+def generate_price_paths(
+    s0: float,
+    distribution,
+    n_paths: int,
+    n_steps: int,
+) -> np.ndarray:
+    """Generate price paths from a fitted return distribution.
+
+    Returns:
+        np.ndarray: price matrix of shape (n_paths, n_steps)
+    """
+    r = distribution.sample(n_paths, n_steps)  # log returns
+    log_s = np.log(s0) + np.cumsum(r, axis=1)
+    return np.exp(log_s)
+```
+
+### RunConfig & Run Metadata Schema
+
+```python
+# schema/run_config.py
+
+from dataclasses import dataclass, field
+from typing import Dict, Any
+
+@dataclass
+class RunConfig:
+    symbol: str
+    data_source: str
+    distribution: str
+    strategy_name: str
+    strategy_params: Dict[str, Any]
+    mc_paths: int
+    mc_steps: int
+    random_seed: int
+    resource_limits: Dict[str, Any] = field(default_factory=dict)
+```
+
+Example `run_meta.json` written per run:
+
+```json
+{
+  "run_id": "2025-11-16_15-30-22",
+  "symbol": "AAPL",
+  "data_source": "yfinance",
+  "distribution": "student_t",
+  "strategy": "MeanReversionCall",
+  "strategy_params": { "threshold": 0.03, "contracts": 1 },
+  "mc_paths": 1000,
+  "mc_steps": 60,
+  "random_seed": 42,
+  "version": "QuantScenarioEngine v0.1.0"
+}
+```
+
+These references guide implementation and contract tests but do not constrain internal module layout beyond the requirements defined in `spec.md` and `data-model.md`.
