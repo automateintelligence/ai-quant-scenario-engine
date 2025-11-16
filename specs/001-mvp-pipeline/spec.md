@@ -1,5 +1,7 @@
 # Feature Specification: Backtesting & Strategy Spec Authoring
 
+**Hierarchy**: Parent constitution at `.specify/memory/CONSTITUTION.md`; this spec governs downstream artifacts (`plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`).
+
 **Feature Branch**: `001-mvp-pipeline`  
 **Created**: 2025-11-15  
 **Status**: Draft  

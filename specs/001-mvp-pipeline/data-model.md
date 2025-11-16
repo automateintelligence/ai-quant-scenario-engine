@@ -1,5 +1,7 @@
 # Data Model
 
+Parent: `plan.md` (under `spec.md` per constitution). Children: contracts consume schemas; quickstart/CLI examples rely on these entities.
+
 ## Relationships Overview
 - `DataSource` → `ReturnDistribution` → `PricePath` → `StrategySignals` → `SimulationRun` → `MetricsReport`.
 - `CandidateSelector` → `CandidateEpisode` feeds both conditional backtests and conditional Monte Carlo sampling.

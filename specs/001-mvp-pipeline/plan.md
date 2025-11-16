@@ -2,6 +2,7 @@
 
 **Branch**: `001-mvp-pipeline` | **Date**: 2025-11-16 | **Spec**: [/specs/001-mvp-pipeline/spec.md](/specs/001-mvp-pipeline/spec.md)
 **Input**: Feature specification from `/specs/001-mvp-pipeline/spec.md`
+**Hierarchy**: Parent spec above per `.specify/memory/CONSTITUTION.md`; this plan is parent to `research.md`, `data-model.md`, `contracts/`, and `quickstart.md` in the same directory.
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
 

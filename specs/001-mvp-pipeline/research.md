@@ -1,5 +1,7 @@
 # Research Findings (Phase 0 Summary)
 
+Parent: `plan.md` (per spec.md and constitution). Children: informs `data-model.md`, `contracts/`, `quickstart.md`.
+
 Each decision below links to the corresponding requirements and captures performance/operational implications. Rejection criteria are explicit for traceability.
 
 ## Decision Log

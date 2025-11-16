@@ -1,5 +1,7 @@
 # Quickstart
 
+Parent: `plan.md` (derived from `spec.md` per constitution). References: `research.md` decisions, `data-model.md` entities, `contracts/` schemas for CLI/config validation.
+
 1) **Environment**
 - Python 3.11 on Linux VPS (8 vCPU, 24 GB RAM).
 - Create venv: `python3 -m venv .venv && source .venv/bin/activate`.
