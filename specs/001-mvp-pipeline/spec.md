@@ -2,9 +2,11 @@
 
 **Hierarchy**: Parent constitution at `.specify/memory/CONSTITUTION.md`; this spec governs downstream artifacts (`plan.md`, `research.md`, `data-model.md`, `contracts/`, `quickstart.md`).
 
-**Feature Branch**: `001-mvp-pipeline`  
-**Created**: 2025-11-15  
-**Status**: Draft  
+**Feature Branch**: `001-mvp-pipeline`
+**Spec Version**: 1.0.0
+**Created**: 2025-11-15
+**Last Updated**: 2025-11-16
+**Status**: Draft
 **Input**: User description: "Review 'planning/project_goals.md' and 'planning/project_overview.md' and then create specifications."
 
 ## User Scenarios & Testing *(mandatory)*
@@ -231,13 +233,268 @@ class BlackScholesPricer:
 - **FR-037**: Distribution “implausible parameter” thresholds SHALL be defined per model (e.g., scale > 0 and finite; Student-T df ∈ [2, 100]; GARCH parameters within stationarity bounds) and violations must fail fast with structured errors.
 - **FR-038**: Fail-fast is the default for invalid data/config/fits; recoverable fallbacks (e.g., secondary data source, unconditional MC) MUST emit warnings and record the fallback in logs and run_meta.
 - **FR-039**: Logging MUST be structured (JSON) and include at minimum timestamp, run_id, component, event, severity, duration (when applicable), and key parameters; long-running jobs MUST emit progress updates.
-- **FR-040**: Performance budgets MUST be documented and enforced: data load/fit/MC/strategy eval latencies, MC throughput targets, expected resource utilization, and grid scaling behavior; breaches MUST trigger structured warnings.
+- **FR-040**: Performance budgets MUST be documented and enforced: data load/fit/MC/strategy eval latencies, MC throughput targets, expected resource utilization, and grid scaling behavior; breaches MUST trigger structured warnings. Performance measurement methodology SHALL be:
+  - **Wall-clock time**: Measured via `time.perf_counter()` for end-to-end CLI duration.
+  - **CPU time**: Measured via `time.process_time()` for computational work.
+  - **Benchmark VPS**: 8 vCPU, 24 GB RAM, NVMe SSD; OS: Ubuntu 22.04; Python 3.11.
+  - Measurements MUST be recorded in `run_meta.json` under `performance_metrics` with units (seconds, GB, paths/second).
+
+# **Configuration Safety & Validation Requirements**
+
+- **FR-041**: System MUST define "invalid configuration" exhaustively with the following error conditions:
+  1. **Type mismatches**: String provided for integer field (e.g., `mc_paths: "one thousand"`).
+  2. **Out-of-range values**: `mc_paths <= 0`, `mc_steps <= 0`, `max_workers <= 0`.
+  3. **Unknown keys**: Configuration keys not in schema trigger strict validation errors.
+  4. **Incompatible combinations**: E.g., `option_pricer: "heston"` with `asset_type: "stock"`.
+  5. **Missing required fields**: `symbol`, `data_source`, `distribution` are mandatory for all runs.
+  6. **Invalid enum values**: E.g., `distribution: "unknown_model"` not in `["laplace", "student_t", "normal", "garch_t"]`.
+  7. **Constraint violations**: E.g., `strike <= 0`, `maturity_days <= 0`, `implied_vol <= 0` or `> 10`.
+
+- **FR-042**: Configuration validation error messages MUST include:
+  - **Field name**: Exact path in config (e.g., `strategy_params.threshold`).
+  - **Invalid value**: The value provided by the user.
+  - **Constraint**: What was violated (e.g., "must be > 0", "must be one of [...]").
+  - **Fix suggestion**: Actionable next step (e.g., "Set mc_paths to a positive integer, e.g., 1000").
+  - Example: `ConfigValidationError: Field 'mc_paths' has invalid value 'abc'. Constraint: must be integer > 0. Fix: Set mc_paths to a positive integer, e.g., 1000.`
+
+- **FR-043**: Component wiring mechanism MUST be implemented via:
+  - **Factory pattern**: `DataSourceFactory`, `DistributionFactory`, `PricerFactory`, `SelectorFactory`.
+  - Each factory MUST maintain a registry (dict) of component types → implementation classes.
+  - Configuration key (e.g., `data_source: "yfinance"`) maps to registered class at runtime.
+  - Factories MUST raise `ComponentNotFoundError` if key is unregistered.
+  - All component swaps MUST be logged with prior/new values in structured logs.
+
+- **FR-044**: Configuration precedence SHALL be enforced as: **CLI flags > Environment variables > YAML files > Built-in defaults**. All precedence overrides MUST be logged at INFO level with format: `Config override: field='max_workers', source='CLI', old=4, new=6`.
+
+- **FR-045**: System MUST define defaults for all optional parameters:
+  - `mc_paths`: 1000
+  - `mc_steps`: 60
+  - `max_workers`: `min(6, os.cpu_count() or 1)`
+  - `random_seed`: 42
+  - `storage_policy`: "auto" (in-memory < 25% RAM; else memmap)
+  - `gap_threshold`: 0.02 (2%)
+  - `volume_spike_threshold`: 2.0 (2× avg volume)
+  - `distance_threshold`: 2.0 (std devs)
+
+# **Data Integrity & Drift Requirements**
+
+- **FR-046**: "Data drift" SHALL be quantified with:
+  1. **Schema drift**: Column name changes, dtype changes, index type changes.
+  2. **Value distribution shifts**: Mean/std of returns change by >20% vs prior version.
+  3. **Row count deltas**: Total bars change by >5% vs prior version.
+  - Drift detection MUST compute hash over `(schema, row_count, mean_return, std_return)` and compare to `run_meta.json` on replay.
+  - Drift status (none/schema/distribution/count) MUST be recorded in replay output.
+
+- **FR-047**: "NaN handling" priority order SHALL be:
+  1. **Drop**: Remove bars with NaN in critical columns (close, open, high, low, volume) if total dropped < 1% of window.
+  2. **Forward-fill**: Propagate last valid observation up to 3× bar interval.
+  3. **Backward-fill**: If gap at window start, backfill from first valid bar up to 3× bar interval.
+  4. **Abort**: If gaps exceed tolerances, raise `InsufficientDataError` with gap statistics.
+  - NaN handling method applied MUST be logged in `run_meta.json`.
+
+- **FR-048**: "Source version" format SHALL be: `{provider}_{semantic_version}_{iso_date}`, e.g., `yfinance_0.2.31_2025-11-15` or `schwab_api_1.0.0_2025-11-15`. Git SHA MAY be appended: `yfinance_0.2.31_2025-11-15_a3f5b2c`.
+
+# **Edge Case & Boundary Condition Requirements**
+
+- **FR-049**: System MUST handle small `n_paths` (1–10) with warnings:
+  - Emit `WARNING: n_paths={n_paths} is too small for reliable statistics. Recommend n_paths ≥ 100.`
+  - Proceed with run but mark `statistics_reliable: false` in `run_meta.json`.
+
+- **FR-050**: System MUST detect bankruptcy scenarios (all prices → 0) and:
+  - Log `ERROR: All paths reached zero or negative prices. Strategy P&L undefined.`
+  - Abort run with `BankruptcyError` and record failed paths in diagnostics.
+
+- **FR-051**: System MUST detect zero-volatility scenarios (all returns = 0) and:
+  - Log `WARNING: Zero volatility detected (std_return = 0). MC paths will be constant.`
+  - Generate constant paths (all equal to S0) and mark `zero_volatility: true` in `run_meta.json`.
+
+- **FR-052**: System MUST handle empty configuration files by:
+  - Loading all built-in defaults (per FR-045).
+  - Emitting `INFO: Empty config file; using all defaults.`
+
+- **FR-053**: System MUST detect contradictory settings (e.g., `mc_paths: 100000` with `memory_limit_gb: 1`) by:
+  - Running preflight memory estimator (FR-023).
+  - Raising `ConfigConflictError: Estimated memory ({est_gb} GB) exceeds limit ({limit_gb} GB). Reduce mc_paths or increase limit.`
+
+- **FR-054**: System MUST reject configuration changes mid-grid execution:
+  - Grid worker processes snapshot config at start.
+  - Config file modifications during grid run SHALL NOT affect in-flight workers.
+  - Warn on detection: `WARNING: Config file modified during grid run. Changes ignored for current run.`
+
+- **FR-055**: System MUST handle symbols with constant prices (no volatility) by:
+  - Detecting `std(close) = 0` and emitting `WARNING: Constant price detected for {symbol}. Strategy signals undefined.`
+  - Skip symbol in screening or mark `skipped: true` in results.
+
+- **FR-056**: System MUST handle symbols with extreme gaps (>50% overnight moves) by:
+  - Emitting `WARNING: Extreme gap detected: {gap_pct:.1%} at {timestamp}. Data quality questionable.`
+  - Proceed with run but mark `extreme_gaps: [{timestamp, gap_pct}, ...]` in `run_meta.json`.
+
+- **FR-057**: System MUST reject data with future dates or timestamp anomalies:
+  - Detect timestamps > `datetime.now(tz=UTC)` and raise `TimestampAnomalyError: Future dates detected: {timestamps}.`
+  - Detect non-monotonic timestamps and raise `TimestampAnomalyError: Non-monotonic index detected.`
+
+- **FR-058**: System MUST handle `max_workers` boundary conditions:
+  - `max_workers = 1`: Sequential execution with no parallelism (valid).
+  - `max_workers > os.cpu_count()`: Clamp to `os.cpu_count()` and emit `WARNING: max_workers clamped to {clamped_value}.`
+  - `max_workers <= 0`: Raise `ConfigValidationError: max_workers must be ≥ 1.`
+
+- **FR-059**: System MUST handle grid with single config (degenerates to compare):
+  - Detect `len(configs) = 1` and emit `INFO: Single config grid; behaves as compare.`
+  - Produce same artifacts as compare command with grid metadata.
+
+- **FR-060**: System MUST handle ATM options (strike = current price) with numerical precision:
+  - Use tolerance `abs(strike - spot) < 0.01 * spot` to detect ATM.
+  - Apply consistent rounding (e.g., round strike to nearest $0.01) to avoid float precision issues.
+  - Log `INFO: ATM option detected (strike={strike}, spot={spot})` when tolerance met.
+
+# **Non-Functional Requirements (Reliability, Observability, Maintainability)**
+
+- **FR-061**: System MUST support graceful shutdown during long-running operations:
+  - Register signal handlers for SIGTERM and SIGINT (Ctrl+C).
+  - On signal, set shutdown flag and allow current worker tasks to finish.
+  - Emit `INFO: Shutdown requested. Finishing current tasks...` and exit with status 130 (interrupted).
+
+- **FR-062**: System MUST preserve partial results on failure:
+  - Grid jobs SHALL write per-config results immediately after completion (not batched at end).
+  - On failure, partial `grid_results.json` MUST contain completed configs with `incomplete: true` flag.
+
+- **FR-063**: System MUST version configuration file format:
+  - Config files MUST include `schema_version: "1.0"` at top level.
+  - Loader MUST check version and refuse incompatible versions: `ConfigVersionError: Config schema {version} not supported. Expected 1.x.`
+
+- **FR-064**: System MUST maintain backward compatibility for `run_meta.json`:
+  - New fields MAY be added with defaults but MUST NOT remove/rename existing fields in v1.x releases.
+  - Breaking changes require major version bump (e.g., 2.0) and migration tool.
+
+- **FR-065**: System MUST define artifact cleanup policies:
+  - **Default retention**: Keep all artifacts indefinitely (user-managed cleanup).
+  - **Optional auto-cleanup**: If `cleanup_policy.max_age_days` is set, purge runs older than threshold on next CLI invocation.
+  - Cleanup MUST log: `INFO: Purged {count} runs older than {days} days.`
+
+# **Dependency & Assumption Requirements**
+
+- **FR-066**: System MUST handle pandas-ta indicator unavailability:
+  - Detect missing indicators via `try: import pandas_ta except ImportError`.
+  - Raise `DependencyError: pandas-ta not installed. Required for feature '{feature_name}'. Install via: pip install pandas-ta`.
+
+- **FR-067**: System MUST enforce scipy/numpy version compatibility:
+  - Require `numpy >= 1.24, < 2.0` and `scipy >= 1.10, < 2.0`.
+  - Check versions on import and raise `DependencyError: numpy {version} incompatible. Expected >= 1.24, < 2.0.`
+
+- **FR-068**: System MUST document VPS OS and Python constraints:
+  - **Supported OS**: Linux (Ubuntu 22.04 or compatible), macOS 12+ (development only).
+  - **Python version**: Python 3.11.x (pinned in `.python-version` or `pyproject.toml`).
+  - **Unsupported**: Windows, Python <3.11 or ≥3.12.
+
+- **FR-069**: System MUST enforce task execution order:
+  - Data load → Schema validation → Distribution fit → MC generation → Strategy eval → Metrics aggregation → Artifact write.
+  - Blocking dependencies MUST prevent out-of-order execution (enforced via function call DAG).
+
+- **FR-070**: System MUST check for data/feature directory pre-existence:
+  - CLI commands MUST verify `data/historical/{interval}/` and `data/features/{interval}/` exist or raise `DirectoryNotFoundError: Required directory {path} not found. Run data ingestion first.`
+
+- **FR-071**: System MUST pin required Python packages:
+  - `requirements.txt` or `pyproject.toml` MUST specify exact versions (via `==`) or constrained ranges (via `>=,<`) for all direct dependencies.
+  - Critical packages: `numpy==1.26.2`, `pandas==2.1.3`, `scipy==1.11.4`, `numba==0.58.1`, `statsmodels==0.14.0`, `typer==0.9.0`, `pydantic==2.5.0`.
+
+# **Traceability & Reproducibility Requirements**
+
+- **FR-072**: System MUST capture git commit hash in `run_meta.json`:
+  - Detect via `git rev-parse HEAD` and store as `git_commit_sha`.
+  - If not a git repo, store `git_commit_sha: null` and emit `WARNING: Not a git repository. Git SHA not captured.`
+
+- **FR-073**: System MUST capture system configuration in `run_meta.json`:
+  - Include: `os_type` (Linux/macOS), `os_version`, `python_version`, `cpu_count`, `total_ram_gb`.
+  - Example: `{"os_type": "Linux", "os_version": "Ubuntu 22.04", "python_version": "3.11.6", "cpu_count": 8, "total_ram_gb": 24}`.
+
+- **FR-074**: System MUST guarantee numerical reproducibility across CPU architectures:
+  - Require IEEE 754 compliance for float64 operations (standard on x86-64, ARM64).
+  - For SIMD operations (via numba), set `fastmath=False` to preserve bit-exact results.
+  - Document acceptable tolerance: `±1e-10` for path-level values; `±1e-6` for aggregated metrics.
+
+- **FR-075**: System MUST version requirements themselves:
+  - Spec document SHALL include `spec_version: "1.0.0"` in frontmatter.
+  - Store spec version in `run_meta.json` as `spec_version`.
+
+- **FR-076**: System MUST support backward compatibility testing:
+  - Test suite SHALL include "golden run" tests that load `run_meta.json` from prior versions and verify metrics match within tolerance.
+
+- **FR-077**: System MUST define migration paths for breaking changes:
+  - Config format changes: Provide `migrate_config.py` script to convert v1 → v2.
+  - Schema changes: Provide migration scripts in `migrations/` directory.
+
+# **Warning Level & Tolerance Specification**
+
+- **FR-078**: "Escalating warnings" (FR-018) SHALL be defined as:
+  - **Level 1 (INFO)**: Informational messages for normal events (e.g., config overrides, defaults applied).
+  - **Level 2 (WARNING)**: Recoverable issues that may affect results (e.g., data gaps filled, selector sparsity fallback).
+  - **Level 3 (ERROR)**: Unrecoverable errors requiring abort (e.g., invalid config, distribution fit failure).
+  - Long-running operations MUST emit Level 2 warnings at:
+    - 50% of time budget: `WARNING: Operation at 50% of time budget.`
+    - 90% of time budget: `WARNING: Operation at 90% of time budget. May exceed limit.`
+    - 100% of time budget: Abort remaining tasks and exit with ERROR.
+
+- **FR-079**: "Reasonable tolerances" for numeric comparison SHALL be:
+  - **Monte Carlo path values**: `±1e-10` (bit-exact when seeded).
+  - **Aggregated metrics** (mean P&L, Sharpe): `±1e-6`.
+  - **Distribution parameters** (scale, location): `±1e-8`.
+  - **Price alignment**: `±1e-2` (one cent for USD).
+
+# **Recovery & Fallback Requirements**
+
+- **FR-080**: Selector sparsity fallback SHALL trigger when:
+  - Candidate episode count < `min_episodes` (default: 10).
+  - Fallback: Use unconditional MC with full historical window.
+  - Emit: `WARNING: Selector found {count} episodes (< {min_episodes}). Falling back to unconditional MC.`
+  - Record `fallback_reason: "selector_sparsity"` in `run_meta.json`.
+
+- **FR-081**: Grid job partial failure recovery SHALL:
+  - Continue evaluating remaining configs when a config fails.
+  - Log failure: `ERROR: Config {index} failed: {error_msg}. Continuing with remaining configs.`
+  - Mark failed config in results: `{"config": {...}, "status": "failed", "error": "..."}`.
+  - Grid run succeeds if ≥1 config completes; fails if all configs fail.
+
+# **Candidate State Feature Vector Specification**
+
+- **FR-082**: "Candidate state" feature vector MUST include:
+  - **Price features** (normalized by S0): `[close/S0, open/S0, high/S0, low/S0]`.
+  - **Volume features** (normalized by 20-day avg): `[volume/avg_volume_20d]`.
+  - **Return features**: `[log_return_1d, log_return_5d, log_return_20d]`.
+  - **Volatility features**: `[realized_vol_20d, realized_vol_60d]`.
+  - **Optional indicators**: User-configured (e.g., `[rsi_14, macd, bb_upper]`).
+  - All features MUST be z-score normalized: `(x - mean) / std` before distance calculations.
+  - Feature vector schema MUST be recorded in `run_meta.json`.
+
+# **Objective Function Specification**
+
+- **FR-083**: Objective function scoring for grid ranking SHALL be defined as:
+  - **Formula**: `objective_score = w1 * mean_pnl + w2 * sharpe_ratio + w3 * (-max_drawdown) + w4 * (-cvar_95)`
+  - **Default weights**: `w1=0.3, w2=0.3, w3=0.2, w4=0.2` (sum to 1.0).
+  - **Normalization**: Each metric MUST be z-score normalized across grid configs before weighting.
+  - **Ranking**: Configs sorted descending by `objective_score`.
+  - Weights MUST be configurable via `objective_weights` in config; logged in `run_meta.json`.
+
+# **Parallel Execution Model Specification**
+
+- **FR-084**: Parallel execution concurrency model SHALL be:
+  - **Process pool**: Use `concurrent.futures.ProcessPoolExecutor` for grid jobs (config-level parallelism).
+  - **Shared memory**: None; each worker process has independent memory space.
+  - **IPC**: Parent process collects results via return values (no shared state).
+  - **Thread pool**: NOT used (GIL contention for CPU-bound MC).
+  - **Max workers**: Clamped to `min(max_workers_config, os.cpu_count() - 2)` to reserve 2 cores for OS.
+  - Model details MUST be documented in `plan.md` under "Concurrency Model".
 
 # **Candidate Selection Functional Requirements**
-- **FR-CAND-001:** System SHALL implement a `CandidateSelector` abstraction that produces candidate timestamps based solely on information available at time t.
-- **FR-CAND-002:** System SHALL construct “candidate episodes” (symbol, t0, horizon) for all historical timestamps where the selector fires.
-- **FR-CAND-003:** System SHALL support “conditional backtests,” where strategies are evaluated only on candidate episodes and performance metrics are computed at the episode level.
-- **FR-CAND-004:** System SHALL support “conditional Monte Carlo” that generates simulated price paths conditioned on the current state being similar to historical candidate episodes.
+- **FR-CAND-001:** System SHALL implement a `CandidateSelector` abstraction that produces candidate timestamps based solely on information available at time t. The system MUST support at least the following selector methods enumerated explicitly:
+  1. **Gap/Volume Spike** (default): Triggers when `abs(open - prev_close) / prev_close > gap_threshold` AND `volume / avg_volume_20d > volume_spike_threshold`.
+  2. **Custom DSL configs**: YAML-based boolean/threshold expressions over computed features without requiring code changes.
+  3. Selector methods MUST be registered via a selector factory and selected by configuration key (e.g., `selector_type: "gap_volume"`).
+- **FR-CAND-002:** System SHALL construct "candidate episodes" (symbol, t0, horizon) for all historical timestamps where the selector fires.
+- **FR-CAND-003:** System SHALL support "conditional backtests," where strategies are evaluated only on candidate episodes and performance metrics are computed at the episode level.
+- **FR-CAND-004:** System SHALL support "conditional Monte Carlo" that generates simulated price paths conditioned on the current state being similar to historical candidate episodes. "Sufficiently different" for conditional episode matching SHALL be quantified using:
+  - **Euclidean distance** in normalized feature space with threshold `distance_threshold` (default: 2.0 standard deviations).
+  - **Mahalanobis distance** when covariance matrix is available (optional, configurable via `use_mahalanobis: true`).
+  - Distance metric selection MUST be configurable per run and logged in `run_meta.json`.
 - **FR-CAND-005:** System SHOULD support at least one non-parametric episode-resampling method and one parametric state-conditioned return model.
 - **FR-CAND-006:** System MUST ship at least one default selector (gap/volume spike rule) for MVP and allow selector swapping via configuration without code changes.
 
@@ -321,7 +578,7 @@ Run metadata SHALL be written atomically and treated as immutable after run comp
 - **Memory thresholds (FR-013 vs FR-018)**: Both use the same estimator (<25% RAM in-memory; otherwise memmap/npz) and max_workers ≤ 6 on 8-core VPS; preflight checks enforce both.
 - **Storage policy (DM-009 vs US8 replay)**: Default is non-persistent; persistence only when explicitly requested or required for memmap/replay, recorded in run_meta (FR-031).
 - **Fail-fast vs fallback (FR-010 vs recovery)**: Fail-fast is default (FR-038); fallbacks (secondary data sources, unconditional MC) are allowed only with explicit warnings + run_meta entries.
-- **max_workers alignment**: Contracts/OpenAPI capped at 6 to match plan/spec FR-018; tasks/plan must honor this cap.
+- **max_workers alignment (CHK131)**: Resolved by clamping implementation to `min(max_workers_config, os.cpu_count() - 2)` with default=6 for 8-core VPS (per FR-058, FR-084). Contracts/OpenAPI SHALL accept any positive integer but document recommended max=6 for 8-core baseline. Runtime enforcement via clamp (not schema rejection) allows flexibility for larger VPS configs while maintaining safe defaults.
 
 ### **DM-001: Resolution Selection – Daily Bars**
 The system SHALL use **daily OHLCV bars** for:
@@ -482,10 +739,199 @@ The system SHALL guarantee reproducibility of Monte Carlo runs using:
 * **SC-020**: When data gaps or missing values exceed a configurable tolerance, the system emits explicit warnings and either (a) drops affected episodes or (b) imputes as configured, recording the choice in the run metadata.
 * **SC-021**: Each run directory contains sufficient logs (timestamps, parameters, progress markers) to trace which configurations were evaluated and in what order, enabling post-mortem analysis of grid or batch runs.
 
+### Configuration Safety & Validation Success Criteria
+* **SC-022**: Given any invalid configuration (per FR-041 enumeration), the system fails fast with a structured error message containing field name, invalid value, constraint, and fix suggestion (per FR-042).
+* **SC-023**: Given a configuration with contradictory settings (e.g., high mc_paths + low memory_limit_gb), the preflight estimator detects the conflict and raises `ConfigConflictError` before starting the run (per FR-053).
+* **SC-024**: Given an empty configuration file, the system loads all built-in defaults (per FR-045) and completes a run successfully with `INFO: Empty config file; using all defaults` logged.
+* **SC-025**: Given a configuration change mid-grid execution, in-flight workers complete with original config and log `WARNING: Config file modified during grid run. Changes ignored for current run` (per FR-054).
+
+### Data Integrity & Drift Success Criteria
+* **SC-026**: Given a Parquet file with schema drift (column rename), the system detects drift on load and raises `SchemaError` unless a compatibility rule is defined (per FR-027).
+* **SC-027**: Given a replay command for a run where data has drifted (per FR-046 metrics), the system refuses replay by default and requires `--allow_data_drift` flag to proceed (per FR-019).
+* **SC-028**: Given data with NaN values, the system applies the priority order (drop → forward-fill → backward-fill → abort per FR-047) and logs the method used in `run_meta.json`.
+* **SC-029**: Given data with extreme gaps (>50% overnight move), the system emits warning and records `extreme_gaps` metadata per FR-056.
+
+### Edge Case & Boundary Condition Success Criteria
+* **SC-030**: Given `n_paths=5`, the system emits `WARNING` about unreliable statistics, proceeds with run, and marks `statistics_reliable: false` in `run_meta.json` (per FR-049).
+* **SC-031**: Given MC paths where all prices → 0 (bankruptcy scenario), the system aborts with `BankruptcyError` and records failed path count in diagnostics (per FR-050).
+* **SC-032**: Given data with zero volatility (`std=0`), the system generates constant paths, emits `WARNING`, and marks `zero_volatility: true` in `run_meta.json` (per FR-051).
+* **SC-033**: Given `max_workers=1`, the system runs sequentially without parallelism and completes successfully (per FR-058).
+* **SC-034**: Given `max_workers=12` on an 8-core VPS, the system clamps to `8` and emits `WARNING: max_workers clamped to 8` (per FR-058).
+* **SC-035**: Given a grid with single config, the system detects degenerate case, emits `INFO`, and produces artifacts equivalent to compare command (per FR-059).
+* **SC-036**: Given ATM option (strike ≈ current price within 1% tolerance), the system applies consistent rounding and logs `INFO: ATM option detected` (per FR-060).
+* **SC-037**: Given data with future timestamps, the system raises `TimestampAnomalyError` and aborts (per FR-057).
+* **SC-038**: Given symbol with constant price (`std=0`), the system skips in screening with `WARNING` or marks `skipped: true` (per FR-055).
+
+### Non-Functional Success Criteria (Reliability, Maintainability)
+* **SC-039**: Given SIGTERM or SIGINT during grid run, the system finishes current tasks, writes partial results, and exits with status 130 (per FR-061).
+* **SC-040**: Given a grid job where 3/10 configs fail, the system writes `grid_results.json` with 7 successful configs and 3 marked `status: "failed"` (per FR-062, FR-081).
+* **SC-041**: Given a config file with `schema_version: "2.0"` (unsupported), the system refuses to load and raises `ConfigVersionError` (per FR-063).
+* **SC-042**: Given artifact cleanup policy `max_age_days: 30`, the system purges runs older than 30 days on next CLI invocation and logs count purged (per FR-065).
+
+### Dependency & Assumption Success Criteria
+* **SC-043**: Given missing `pandas-ta` when indicator is configured, the system raises `DependencyError` with installation instructions (per FR-066).
+* **SC-044**: Given incompatible `numpy==2.0.0`, the system checks version on import and raises `DependencyError` (per FR-067).
+* **SC-045**: Given missing `data/historical/1d/` directory, the CLI raises `DirectoryNotFoundError` with actionable message (per FR-070).
+
+### Traceability & Reproducibility Success Criteria
+* **SC-046**: Given any successful run, `run_meta.json` includes `git_commit_sha`, `spec_version`, `python_version`, `cpu_count`, `total_ram_gb`, and all component versions (per FR-072, FR-073, FR-075).
+* **SC-047**: Given two runs with same seed/config on same VPS, path-level values match within `±1e-10` and metrics within `±1e-6` (per FR-074, FR-079).
+* **SC-048**: Given two runs with same seed/config on different CPU architectures (x86-64 vs ARM64), metrics match within `±1e-6` (per FR-074).
+
+### Candidate Selection & Conditional MC Success Criteria
+* **SC-049**: Given selector configuration `selector_type: "gap_volume"` with thresholds, the system produces candidate episodes using enumerated method (per FR-CAND-001).
+* **SC-050**: Given conditional MC with `distance_metric: "euclidean"` and `distance_threshold: 2.0`, the system selects similar historical episodes within threshold and logs metric in `run_meta.json` (per FR-CAND-004).
+* **SC-051**: Given selector sparsity (<10 episodes), the system falls back to unconditional MC, emits `WARNING`, and records `fallback_reason: "selector_sparsity"` (per FR-080).
+
+### Grid Ranking & Objective Function Success Criteria
+* **SC-052**: Given a grid of configs, the system computes `objective_score` per FR-083 formula, ranks configs descending, and outputs ranked list in `grid_results.json` (addresses CHK051).
+* **SC-053**: Given custom objective weights `objective_weights: {w1: 0.5, w2: 0.5, w3: 0, w4: 0}`, the system applies custom weights and logs them in `run_meta.json` (per FR-083).
+
+### Data Management Success Criteria (DM-Series Mappings)
+* **SC-054 (DM-001/002/003)**: System successfully loads daily, 5-minute, and 1-minute OHLCV from Parquet for intended use cases (model fitting, backtesting, live signals).
+* **SC-055 (DM-004/005/006)**: System stores and reloads historical OHLCV and derived features from Parquet following directory layout without schema drift.
+* **SC-056 (DM-007)**: System maintains Universe/Watchlist/Live Set tiering with appropriate data resolutions per tier.
+* **SC-057 (DM-008/009)**: System generates MC paths in memory by default (<25% RAM) and does not persist unless required (per FR-031).
+* **SC-058 (DM-010/011/012)**: When MC exceeds 25% RAM threshold, system automatically uses memmap/npz storage and logs transition (per FR-013/FR-023).
+* **SC-059 (DM-013)**: Historical Parquet data is versioned and retained; replays detect version changes and refuse unless forced (per FR-019).
+* **SC-060 (DM-014)**: MC path arrays are treated as ephemeral; only persisted when explicitly required or memmap fallback triggered.
+
+### Performance Budget Validation Success Criteria
+* **SC-061**: Baseline run (1,000 paths × 60 steps) completes in ≤10s on benchmark VPS (8 vCPU, 24 GB RAM, Ubuntu 22.04, Python 3.11) with wall-clock time measured via `time.perf_counter()` (per FR-040).
+* **SC-062**: Grid run (≤50 configs, 1,000 paths × 60 steps each) completes in ≤15 minutes on benchmark VPS with `max_workers=6` (per FR-018, FR-040).
+* **SC-063**: Distribution fit (Laplace/Student-T) completes in ≤1s per symbol window (per plan.md performance budget).
+* **SC-064**: MC generation achieves ≥50k steps/second aggregate throughput on benchmark VPS (per plan.md performance budget).
+* **SC-065**: When operation exceeds 90% of time budget, system emits `WARNING: Operation at 90% of time budget` (per FR-078).
+
+### VPS Configuration Variability Success Criteria
+* **SC-066**: Given 4 vCPU VPS, baseline run completes in ≤15s (1.5× slowdown vs 8 vCPU baseline) (addresses CHK079).
+* **SC-067**: Given 16 vCPU VPS, grid run with `max_workers=14` achieves ≤8 minutes (2× speedup vs 8 vCPU baseline) (addresses CHK079).
+
+### User Story Acceptance → Success Criteria Traceability
+* **US1** (Compare) → SC-001, SC-002, SC-004, SC-005
+* **US2** (Grid) → SC-003, SC-052, SC-053, SC-062
+* **US3** (Features) → SC-043 (pandas-ta)
+* **US4** (Screening) → SC-010, SC-049, SC-051
+* **US5** (Conditional backtest) → SC-008, SC-009, SC-011
+* **US6** (Conditional MC) → SC-007, SC-050, SC-051
+* **US7** (Config swapping) → SC-006, SC-017, SC-022
+* **US8** (Replay) → SC-015, SC-027, SC-046, SC-047, SC-048
+
+### Functional Requirements → Success Criteria Traceability
+* **FR-001** (Data loading) → SC-054
+* **FR-002** (Distributions) → SC-004, SC-016, SC-063
+* **FR-003** (Stock strategy) → SC-002
+* **FR-004** (Option strategy) → SC-002
+* **FR-005** (CLI) → SC-001, SC-005
+* **FR-006** (Features) → SC-043
+* **FR-007** (Grid) → SC-003, SC-052
+* **FR-008** (Artifacts) → SC-002, SC-021
+* **FR-009** (Config swapping) → SC-006, SC-017
+* **FR-010** (Missing data) → SC-020, SC-028
+* **FR-011** (Stubs) → SC-006
+* **FR-012** (Seeding) → SC-004, SC-007, SC-047
+* **FR-013** (Memory limits) → SC-014, SC-058
+* **FR-014** (Alignment) → SC-020
+* **FR-015** (Performance docs) → SC-061-SC-067
+* **FR-016** (Option pricing) → SC-017
+* **FR-017** (Data sources) → SC-006
+* **FR-018** (Resource limits) → SC-001, SC-003, SC-062, SC-065
+* **FR-019** (Replay) → SC-027, SC-059
+* **FR-020** (Distribution validation) → SC-019
+* **FR-021** (Reproducibility) → SC-007, SC-047, SC-048
+* **FR-022** (Overflow handling) → SC-031
+* **FR-023** (Memory estimator) → SC-014, SC-058
+* **FR-024** (Config precedence) → SC-022
+* **FR-025** (Fail-fast config) → SC-022
+* **FR-026** (Component logging) → SC-006
+* **FR-027** (Schema validation) → SC-026
+* **FR-028** (Data fingerprinting) → SC-027
+* **FR-029** (Missing data tolerances) → SC-028
+* **FR-030** (Metadata durability) → SC-046
+* **FR-031** (Storage policy) → SC-057, SC-058
+* **FR-032** (Minimum samples) → SC-019
+* **FR-033** (CLI validation) → SC-022
+* **FR-034** (Artifact formats) → SC-002, SC-046
+* **FR-035** (Episode construction) → SC-010
+* **FR-036** (Conditional MC methods) → SC-050, SC-051
+* **FR-037** (Implausible params) → SC-019
+* **FR-038** (Fail-fast vs fallback) → SC-019, SC-051
+* **FR-039** (Structured logging) → SC-021
+* **FR-040** (Performance budgets) → SC-061-SC-065
+* **FR-041** (Invalid config enumeration) → SC-022
+* **FR-042** (Error messages) → SC-022
+* **FR-043** (Component wiring) → SC-006, SC-017
+* **FR-044** (Config precedence) → SC-022
+* **FR-045** (Defaults) → SC-024
+* **FR-046** (Data drift) → SC-027
+* **FR-047** (NaN handling) → SC-028
+* **FR-048** (Source version format) → SC-046
+* **FR-049** (Small n_paths) → SC-030
+* **FR-050** (Bankruptcy) → SC-031
+* **FR-051** (Zero volatility) → SC-032
+* **FR-052** (Empty config) → SC-024
+* **FR-053** (Contradictory config) → SC-023
+* **FR-054** (Mid-grid config change) → SC-025
+* **FR-055** (Constant price) → SC-038
+* **FR-056** (Extreme gaps) → SC-029
+* **FR-057** (Timestamp anomalies) → SC-037
+* **FR-058** (max_workers boundaries) → SC-033, SC-034
+* **FR-059** (Single-config grid) → SC-035
+* **FR-060** (ATM precision) → SC-036
+* **FR-061** (Graceful shutdown) → SC-039
+* **FR-062** (Partial results) → SC-040
+* **FR-063** (Config versioning) → SC-041
+* **FR-064** (Backward compat) → SC-046
+* **FR-065** (Cleanup policies) → SC-042
+* **FR-066** (pandas-ta fallback) → SC-043
+* **FR-067** (numpy/scipy compat) → SC-044
+* **FR-068** (OS/Python constraints) → SC-046
+* **FR-069** (Task order) → (enforced by implementation DAG)
+* **FR-070** (Directory pre-existence) → SC-045
+* **FR-071** (Package pinning) → SC-046
+* **FR-072** (Git SHA capture) → SC-046
+* **FR-073** (System config capture) → SC-046
+* **FR-074** (Cross-arch repro) → SC-048
+* **FR-075** (Spec versioning) → SC-046
+* **FR-076** (Backward compat tests) → SC-048
+* **FR-077** (Migration paths) → SC-041
+* **FR-078** (Warning levels) → SC-065
+* **FR-079** (Numeric tolerances) → SC-047, SC-048
+* **FR-080** (Selector sparsity) → SC-051
+* **FR-081** (Grid partial failure) → SC-040
+* **FR-082** (Candidate state features) → SC-050
+* **FR-083** (Objective function) → SC-052, SC-053
+* **FR-084** (Parallel execution model) → SC-062
+* **FR-CAND-001** (Selector abstraction) → SC-049
+* **FR-CAND-002** (Episode construction) → SC-010
+* **FR-CAND-003** (Conditional backtest) → SC-008, SC-009, SC-011
+* **FR-CAND-004** (Conditional MC) → SC-007, SC-050
+* **FR-CAND-005** (Methods) → SC-050, SC-051
+* **FR-CAND-006** (Default selector) → SC-049
+
+## Assumptions & Constraints
+
+### Validated Assumptions (explicitly documented and enforced)
+- **ASSUME-001**: VPS has **24 GB RAM** available. System MUST detect total RAM via `psutil.virtual_memory()` and validate ≥ 20 GB available (per FR-073).
+- **ASSUME-002**: VPS has **8 vCPU cores** available. System MUST detect via `os.cpu_count()` and validate ≥ 4 cores (per FR-073).
+- **ASSUME-003**: **Single-user execution** (no concurrent CLI instances from different users). System SHALL NOT implement file locking but SHOULD emit `WARNING` if concurrent runs to same output directory detected via PID file check.
+- **ASSUME-004**: **Historical data is pre-downloaded to Parquet** before running CLI commands. System MUST check for required directories/files (per FR-070) and raise `DirectoryNotFoundError` if missing.
+- **ASSUME-005**: User has **write permissions** to `runs/` directory. System MUST check on startup and raise `PermissionError` if unable to create output directory.
+- **ASSUME-006**: **No live trading execution** in MVP scope. All runs are research/backtest only; no brokerage API integration beyond data ingestion stubs.
+- **ASSUME-007**: **CPU-only execution** (no GPU). All numpy/scipy operations use CPU; no CUDA/cuBLAS/cuDNN dependencies.
+- **ASSUME-008**: **Linux or macOS environment**. Windows is unsupported (per FR-068). System MUST detect OS on startup and emit `WARNING` if running on Windows.
+- **ASSUME-009**: **Python 3.11.x** is installed and active. System MUST check `sys.version_info` and raise error if Python <3.11 or ≥3.12 (per FR-068).
+- **ASSUME-010**: **Network connectivity** available for data source APIs (yfinance, Schwab). System SHALL handle network timeouts gracefully with retries (3× with exponential backoff).
+- **ASSUME-011**: **IEEE 754 compliant float64** arithmetic on CPU. System MUST document that bit-exact reproducibility requires same CPU architecture family (per FR-074).
+
+### Development Velocity Assumptions
+- **ASSUME-012**: "Fast to prototype" means **≤2 weeks** from spec approval to working MVP (baseline compare + grid + screening) with ≥80% test coverage. This is a project management target, not a functional requirement.
+- **ASSUME-013**: Core development is **single-developer** with occasional pairing. Code review is self-review + automated lint/type checks until external reviewer available.
+
 ## Clarifications & Anti-Requirements
 
 - **Conditional Backtesting vs Conditional Monte Carlo**: Conditional backtesting replays historical episodes where a selector fired; conditional MC resamples/parameterizes returns conditioned on the same state and then simulates synthetic paths. Both must share selector definitions but produce different artifacts (historical metrics vs simulated distributions).
-- **Anti-requirements**: MVP will not execute live trades, will not require GPUs, and will not store brokerage credentials in-repo; all runs are research-only.
+- **Anti-requirements**: MVP will not execute live trades, will not require GPUs, and will not store brokerage credentials in-repo; all runs are research-only (per ASSUME-006, ASSUME-007).
 
 ## Glossary (shared across plan/data-model)
 

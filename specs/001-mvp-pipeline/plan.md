@@ -153,24 +153,327 @@ quant-scenario-engine/
 
 Future phases may extend to more advanced pricers, additional distribution models, and portfolio-level strategies once MVP is stable.
 
+## Component Wiring & Dependency Injection
+
+**Factory Pattern Implementation** (per FR-043):
+
+```python
+# config/factories.py
+
+from typing import Protocol, Dict, Type
+
+class DataSourceFactory:
+    """Registry for data source implementations."""
+    _registry: Dict[str, Type] = {}
+
+    @classmethod
+    def register(cls, name: str):
+        """Decorator to register data source implementation."""
+        def wrapper(impl_class):
+            cls._registry[name] = impl_class
+            return impl_class
+        return wrapper
+
+    @classmethod
+    def create(cls, name: str, **kwargs):
+        """Create data source instance from config key."""
+        if name not in cls._registry:
+            raise ComponentNotFoundError(
+                f"Data source '{name}' not registered. "
+                f"Available: {list(cls._registry.keys())}"
+            )
+        return cls._registry[name](**kwargs)
+
+# Usage in data/yfinance_source.py:
+@DataSourceFactory.register("yfinance")
+class YFinanceSource(DataSource):
+    def load_ohlcv(self, symbol, start, end, interval):
+        # implementation
+        pass
+
+# Similar factories for:
+# - DistributionFactory: "laplace", "student_t", "normal", "garch_t"
+# - PricerFactory: "black_scholes", "pyvollib", "heston" (stub)
+# - SelectorFactory: "gap_volume", "custom_dsl"
+```
+
+**Component Swap Logging** (per FR-043):
+- All factory `.create()` calls MUST log at INFO level: `Component loaded: type=DataSource, name=yfinance, prior=schwab`
+- Log format: `{"event": "component_swap", "component_type": "DataSource", "prior": "schwab", "new": "yfinance", "timestamp": "...", "run_id": "..."}`
+
 ## Concurrency & Resource Management
 
-- Concurrency will be implemented via Python's `concurrent.futures` (thread or process pool) with a configurable `max_workers` (default ≤6 on the 8-core VPS).  
-- Grid jobs will use task-level parallelism (different parameter configs as independent tasks) while keeping Monte Carlo path generation vectorized inside each task.  
-- Resource limits will be enforced by:
-  - Estimating memory needs based on `n_paths × n_steps × n_fields × 8 bytes` and comparing to configured RAM thresholds.  
-  - Capping path counts or refusing jobs when estimated usage exceeds configured limits (FR-013, FR-018).  
-  - Logging warnings and failing fast when jobs would exceed runtime or memory budgets.
+**Process Pool Execution Model** (per FR-084):
+
+```python
+# optimizer/grid_runner.py
+
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+
+def run_grid(configs: List[RunConfig], max_workers: int = None):
+    """Execute grid with process-level parallelism."""
+    # Clamp max_workers per FR-058/FR-084
+    if max_workers is None:
+        max_workers = min(6, os.cpu_count() or 1)
+    else:
+        max_workers = min(max_workers, os.cpu_count() - 2)
+        if max_workers != config.max_workers:
+            log.warning(f"max_workers clamped to {max_workers}")
+
+    results = []
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all configs
+        futures = {
+            executor.submit(run_single_config, cfg): idx
+            for idx, cfg in enumerate(configs)
+        }
+
+        # Collect results as they complete (FR-062: partial results)
+        for future in as_completed(futures):
+            idx = futures[future]
+            try:
+                result = future.result()
+                results.append({"config_index": idx, "status": "success", **result})
+                write_partial_result(result)  # FR-062: immediate write
+            except Exception as e:
+                log.error(f"Config {idx} failed: {e}")
+                results.append({"config_index": idx, "status": "failed", "error": str(e)})
+                # FR-081: continue with remaining configs
+
+    return results
+```
+
+**Concurrency Model Details**:
+- **Process pool**: `ProcessPoolExecutor` for grid jobs (config-level parallelism).
+- **Shared memory**: None; each worker has independent memory space (no shared arrays).
+- **IPC**: Parent collects via return values; no pipes/queues for simplicity.
+- **Thread pool**: NOT used (Python GIL prevents CPU-bound parallelism).
+- **Max workers**: `min(max_workers_config, os.cpu_count() - 2)` reserves 2 cores for OS.
+- **MC generation**: Vectorized NumPy/Numba within each worker process (no intra-MC parallelism).
+
+**Resource Limits Enforcement**:
+- **Memory estimator** (FR-023): `estimated_gb = (n_paths * n_steps * 8 * 1.1) / 1e9` (10% overhead).
+- **Thresholds**:
+  - In-memory: `estimated_gb < 0.25 * total_ram_gb` (≈6 GB on 24 GB VPS).
+  - Memmap fallback: `0.25 * total_ram_gb ≤ estimated_gb < 0.5 * total_ram_gb`.
+  - Abort: `estimated_gb ≥ 0.5 * total_ram_gb` → raise `ResourceLimitError`.
+- **Time budgets** (FR-018):
+  - Baseline run: ≤10s (enforced via timeout; abort if exceeded).
+  - Grid run: ≤15m (emit warnings at 50%, 90%; abort remaining tasks at 100%).
+- **Preflight checks**: Run estimator before starting; fail fast if limits exceeded.
 
 ## Error Handling & Observability
 
-- Define explicit exception classes (e.g., `DataSourceError`, `DistributionFitError`, `PricingError`, `ResourceLimitError`, `EpisodeGenerationError`) and raise them from the appropriate layers.  
-- Ensure CLIs:
-  - Exit with non-zero status on unrecoverable errors.  
-  - Emit structured error messages (including symbol, run_id, component, and cause).  
-- Logging:
-  - Use a standard logging configuration (e.g., Python `logging` with INFO/DEBUG levels) and write logs into each run directory alongside metrics and metadata.  
-  - Record key events: data loading, model fits, MC generation, simulation progress, grid job status.
+**Exception Hierarchy** (per FR-041, FR-042):
+
+```python
+# exceptions.py
+
+class QuantScenarioEngineError(Exception):
+    """Base exception for all QSE errors."""
+    pass
+
+class ConfigError(QuantScenarioEngineError):
+    """Configuration validation errors."""
+    pass
+
+class ConfigValidationError(ConfigError):
+    """Invalid configuration field/value (FR-041)."""
+    def __init__(self, field: str, value: Any, constraint: str, fix: str):
+        self.field = field
+        self.value = value
+        self.constraint = constraint
+        self.fix = fix
+        super().__init__(
+            f"Field '{field}' has invalid value '{value}'. "
+            f"Constraint: {constraint}. Fix: {fix}"
+        )
+
+class ConfigConflictError(ConfigError):
+    """Contradictory configuration settings (FR-053)."""
+    pass
+
+class ConfigVersionError(ConfigError):
+    """Unsupported config schema version (FR-063)."""
+    pass
+
+class ComponentNotFoundError(ConfigError):
+    """Component not registered in factory (FR-043)."""
+    pass
+
+class DataError(QuantScenarioEngineError):
+    """Data loading/validation errors."""
+    pass
+
+class DataSourceError(DataError):
+    """Data source fetch failures."""
+    pass
+
+class SchemaError(DataError):
+    """Parquet schema drift (FR-027)."""
+    pass
+
+class InsufficientDataError(DataError):
+    """Below minimum bar count (FR-032)."""
+    pass
+
+class TimestampAnomalyError(DataError):
+    """Future dates or non-monotonic index (FR-057)."""
+    pass
+
+class DistributionFitError(QuantScenarioEngineError):
+    """Distribution fitting failures (FR-020)."""
+    pass
+
+class PricingError(QuantScenarioEngineError):
+    """Option pricing failures."""
+    pass
+
+class ResourceLimitError(QuantScenarioEngineError):
+    """Memory or time budget exceeded (FR-023, FR-018)."""
+    pass
+
+class BankruptcyError(QuantScenarioEngineError):
+    """All MC paths → 0 (FR-050)."""
+    pass
+
+class EpisodeGenerationError(QuantScenarioEngineError):
+    """Candidate episode construction failures."""
+    pass
+
+class DependencyError(QuantScenarioEngineError):
+    """Missing or incompatible dependencies (FR-066, FR-067)."""
+    pass
+```
+
+**Structured Logging** (per FR-039):
+
+```python
+# logging_config.py
+
+import logging
+import json
+from datetime import datetime
+
+class JSONFormatter(logging.Formatter):
+    """Format log records as JSON."""
+    def format(self, record):
+        log_obj = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "component": record.name,
+            "message": record.getMessage(),
+            "run_id": getattr(record, "run_id", None),
+        }
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        if hasattr(record, "duration_ms"):
+            log_obj["duration_ms"] = record.duration_ms
+        # Add custom fields from record
+        for key in ["symbol", "config_index", "n_paths", "n_steps"]:
+            if hasattr(record, key):
+                log_obj[key] = getattr(record, key)
+        return json.dumps(log_obj)
+
+# Setup per run
+def setup_run_logging(run_id: str, output_dir: Path):
+    logger = logging.getLogger("quant_scenario_engine")
+    logger.setLevel(logging.INFO)
+
+    # File handler with JSON format
+    fh = logging.FileHandler(output_dir / "run.log")
+    fh.setFormatter(JSONFormatter())
+    logger.addHandler(fh)
+
+    # Console handler with human-readable format
+    ch = logging.StreamHandler()
+    ch.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    ))
+    logger.addHandler(ch)
+
+    return logger
+```
+
+**CLI Error Handling** (per SC-019, SC-022):
+
+```python
+# cli/main.py
+
+import sys
+from exceptions import *
+
+def cli_main():
+    try:
+        result = run_pipeline(config)
+        return 0
+    except ConfigValidationError as e:
+        log.error(str(e))
+        return 1
+    except InsufficientDataError as e:
+        log.error(f"Data validation failed: {e}")
+        return 2
+    except DistributionFitError as e:
+        log.error(f"Distribution fitting failed: {e}")
+        return 3
+    except ResourceLimitError as e:
+        log.error(f"Resource limit exceeded: {e}")
+        return 4
+    except KeyboardInterrupt:
+        log.info("Shutdown requested. Finishing current tasks...")
+        cleanup_partial_results()
+        return 130  # Standard SIGINT exit code
+    except Exception as e:
+        log.exception("Unhandled exception")
+        return 255
+
+if __name__ == "__main__":
+    sys.exit(cli_main())
+```
+
+**Progress Reporting** (per FR-039):
+
+```python
+# For long-running grid jobs
+for i, config in enumerate(configs):
+    log.info(f"Grid progress: {i+1}/{len(configs)} configs completed")
+    # Emit progress every 10 configs or 1 minute
+```
+
+## VPS Configuration Variability & Benchmarking
+
+**Benchmark Protocol** (addresses CHK079):
+
+1. **Baseline VPS** (8 vCPU, 24 GB RAM, Ubuntu 22.04, Python 3.11):
+   - Run `pytest tests/benchmark/` to execute:
+     - `test_baseline_run()`: 1,000 paths × 60 steps, single config, measure wall time.
+     - `test_grid_run()`: 50 configs × 1,000 paths × 60 steps, `max_workers=6`, measure wall time.
+     - `test_distribution_fit()`: Fit Laplace/Student-T on 252-bar window, measure time per fit.
+     - `test_mc_throughput()`: Generate 1M steps across 10,000 paths, measure steps/second.
+   - Record results in `benchmarks/baseline_8vcpu_24gb.json`.
+
+2. **4 vCPU VPS** (4 vCPU, 12 GB RAM):
+   - Run same benchmark suite with `max_workers=3`.
+   - Expected: 1.5× slower baseline run (≤15s), 2× slower grid run (≤30m).
+   - Record results in `benchmarks/low_spec_4vcpu_12gb.json`.
+
+3. **16 vCPU VPS** (16 vCPU, 48 GB RAM):
+   - Run same benchmark suite with `max_workers=14`.
+   - Expected: ~1× baseline run (still I/O bound), ~2× faster grid run (≤8m).
+   - Record results in `benchmarks/high_spec_16vcpu_48gb.json`.
+
+4. **Validation**:
+   - Compare actual vs expected performance (within 20% tolerance).
+   - If variance >20%, investigate bottlenecks (CPU vs I/O vs memory).
+   - Update performance targets in spec.md if consistent deviation found.
+
+**Benchmark Automation**:
+```bash
+# scripts/run_benchmarks.sh
+pytest tests/benchmark/ -v --benchmark-json=benchmarks/$(hostname)_$(date +%Y%m%d).json
+python scripts/compare_benchmarks.py benchmarks/*.json
+```
 
 ## Performance Budget
 
