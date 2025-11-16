@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Robust launcher: always start a NEW session with this project's API key.
+
+set -euo pipefail
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Direct reference to our key helper script (no config file needed)
+HELPER="$PROJECT_DIR/.claude/get-api-key.sh"
+[[ -x "$HELPER" ]] || { echo "apiKeyHelper not executable: $HELPER"; exit 1; }
+
+# Get key from helper (exact stdout; no quotes)
+KEY="$("$HELPER")"
+# Accept either "sk-..." or "ANTHROPIC_API_KEY=sk-..."
+if [[ "$KEY" =~ ^ANTHROPIC_API_KEY= ]]; then KEY="${KEY#ANTHROPIC_API_KEY=}"; fi
+[[ "$KEY" =~ ^sk- ]] || { echo "apiKeyHelper did not return a valid key"; exit 1; }
+
+MASKED="${KEY:0:8}…${KEY: -4}"
+echo "🔐 Project key loaded ($MASKED)"
+
+# Always start a **new** session id so no old auth is reused
+SID="$(uuidgen 2>/dev/null || python3 - <<'PY'
+import uuid; print(uuid.uuid4())
+PY
+)"
+
+# Force helper refresh quickly when switching projects
+export CLAUDE_CODE_API_KEY_HELPER_TTL_MS="${CLAUDE_CODE_API_KEY_HELPER_TTL_MS:-1000}"
+
+# Run Claude with ONLY this key (strip any parent ANTHROPIC_API_KEY)
+exec env -u ANTHROPIC_API_KEY ANTHROPIC_API_KEY="$KEY" claude --session-id "$SID" "$@"
