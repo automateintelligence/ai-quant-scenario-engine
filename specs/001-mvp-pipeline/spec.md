@@ -211,6 +211,18 @@ class BlackScholesPricer:
   - A grid job (e.g., up to 50 configurations with 1,000 paths × 60 steps each) SHOULD complete in ≤ 15 minutes wall-clock time.
   - The system MUST cap concurrent workers (e.g., max_workers ≤ 6 on an 8-core VPS) and abort the run (with structured error) when pre-run estimates exceed thresholds; if estimates are within limits but runtime exceeds, emit escalating warnings and stop remaining jobs.
 - **FR-019**: System MUST prevent replay when underlying historical data version has changed since `run_meta` (unless an explicit `--force-replay`/`allow_data_drift` flag is provided), and must record the drift status in the replay output.
+- **FR-020**: System MUST enforce distribution parameter validation (per-model bounds, heavy-tail sanity checks) and fit convergence controls (max iterations, failure fallback to Laplace) with structured errors when validation fails.
+- **FR-021**: System MUST ensure reproducibility across seeded runs with numeric tolerance of ±1e-10 for path-level values; captures library versions and seed in `run_meta` and applies seeding to all MC operations (including conditional sampling).
+- **FR-022**: System MUST detect numeric overflow/underflow or non-positive prices during log-return → price transforms and abort with a structured error; paths producing NaN/inf or ≤0 prices SHALL be rejected (no silent clipping).
+- **FR-023**: System MUST apply a deterministic memory footprint estimator (`n_paths × n_steps × 8 bytes` plus 10% overhead) before MC execution and enforce storage policy selection based on the estimator (in-memory <25% RAM; otherwise memmap/npz) with user-visible warnings.
+- **FR-024**: System MUST define configuration precedence (CLI flags > environment variables > YAML files) and log any overrides applied per run.
+- **FR-025**: System MUST fail fast on invalid or incompatible configuration combinations (e.g., pricer not supported for asset type) and MUST define defaults for all optional parameters in configuration schemas.
+- **FR-026**: System MUST log component swap events (data source, distribution, pricer, selector) with timestamp, run_id, and prior→new values for auditability.
+- **FR-027**: System MUST validate Parquet schemas on load (column names, dtypes, index type) and refuse runs on detected drift unless a compatibility rule is defined.
+- **FR-028**: System MUST compute and store data version fingerprints (e.g., SHA256 of Parquet payload + schema hash) in `run_meta` to support drift detection (per FR-019).
+- **FR-029**: System MUST enforce missing-data tolerances: fail/run warning when continuous gaps exceed 3× bar interval or total missing bars exceed 1% of window unless an explicit imputation rule is configured.
+- **FR-030**: System MUST guarantee atomic, append-only writes of `run_meta.json` and artifacts; metadata is immutable after run completion.
+- **FR-031**: Storage policy for Monte Carlo datasets SHALL remain non-persistent by default (DM-009), but persistence is permitted when explicitly requested (replay) or required for memmap fallback; `run_meta` MUST record when persistence is used.
 
 # **Candidate Selection Functional Requirements**
 - **FR-CAND-001:** System SHALL implement a `CandidateSelector` abstraction that produces candidate timestamps based solely on information available at time t.
@@ -283,6 +295,18 @@ def build_candidate_episodes(
 ```
 
 # **Data Management Functional Requirements (DM-Series)**
+
+### **DM-015: Parquet Schema Validation**
+The system SHALL validate Parquet schemas on load (column names, dtypes, index) and fail fast on drift unless a compatibility rule is configured.
+
+### **DM-016: Data Fingerprinting for Drift Detection**
+The system SHALL compute a deterministic fingerprint (e.g., SHA256 over data block + schema hash) per Parquet file and store it in run metadata to detect drift (with optional `--force-replay` override).
+
+### **DM-017: Missing Data Tolerances**
+The system SHALL fail or warn when continuous gaps exceed **3× bar interval** or total missing bars exceed **1% of the window**, unless an explicit imputation strategy is configured and recorded.
+
+### **DM-018: Run Metadata Durability**
+Run metadata SHALL be written atomically and treated as immutable after run completion; retries must not produce partial or corrupted metadata files.
 
 ### **DM-001: Resolution Selection – Daily Bars**
 The system SHALL use **daily OHLCV bars** for:

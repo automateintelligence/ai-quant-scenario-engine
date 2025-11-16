@@ -152,7 +152,7 @@ components:
           enum: [yfinance, schwab_stub]
         max_workers:
           type: integer
-          maximum: 8
+          maximum: 6
         grid:
           type: array
           items:
