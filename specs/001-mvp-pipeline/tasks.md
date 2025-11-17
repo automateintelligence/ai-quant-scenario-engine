@@ -450,7 +450,7 @@ def mock_run_config():
 - [X] T068 [US5] Extend run_strategy_screen() to support optional conditional filtering using selector from US4 per US5 acceptance scenario 2
 - [X] T069 [US5] Extend MarketSimulator to support episode-level P&L tracking in quant-scenario-engine/simulation/simulator.py per FR-CAND-003/FR-050 (bankruptcy tracking for episodes)
 - [X] T070 [US5] Implement episode-level metrics aggregation in quant-scenario-engine/simulation/metrics.py per SC-009/FR-034 (per-episode P&L, aggregate stats, var_method metadata)
-- [ ] T071 [US5] Add unconditional vs conditional metrics comparison reporting per SC-011/SC-009 (US5 acceptance scenario 6 requirements)
+- [X] T071 [US5] Add unconditional vs conditional metrics comparison reporting per SC-011/SC-009 (US5 acceptance scenario 6 requirements)
 - [X] T072 [US5] Implement low-confidence flagging for symbols with <10 episodes per US5 acceptance scenario 4
 
 #### Selector Definition (US5 Mode C)

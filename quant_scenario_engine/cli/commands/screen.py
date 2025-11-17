@@ -118,6 +118,7 @@ def screen(
         if res.metrics_conditional:
             entry["metrics_conditional"] = res.metrics_conditional.to_formatted_dict()
             entry["episode_count"] = res.episode_count
+            entry["comparison"] = res.comparison
         payload.append(entry)
 
     result_obj = {"results": payload}

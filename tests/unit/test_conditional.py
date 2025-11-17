@@ -27,3 +27,5 @@ def test_run_conditional_backtest_with_episode():
     formatted = result.conditional.to_formatted_dict()
     assert "mean_pnl$" in formatted
     assert isinstance(formatted["mean_pnl$"], float)
+    assert result.comparison is not None
+    assert "delta_mean_pnl" in result.comparison

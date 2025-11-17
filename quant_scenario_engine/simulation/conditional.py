@@ -151,9 +151,12 @@ def run_conditional_backtest(
     comparison = None
     if aggregate:
         comparison = {
+            "episode_count": len(reports),
             "delta_mean_pnl": round(aggregate.mean_pnl - unconditional.mean_pnl, 2),
             "delta_sharpe": round(aggregate.sharpe - unconditional.sharpe, 2),
-            "episode_count": len(reports),
+            "delta_sortino": round(aggregate.sortino - unconditional.sortino, 2),
+            "delta_max_drawdown": round(aggregate.max_drawdown - unconditional.max_drawdown, 2),
+            "delta_cvar": round(aggregate.cvar - unconditional.cvar, 2),
         }
     return ConditionalResult(
         unconditional=unconditional,
