@@ -2419,8 +2419,141 @@ Looking at the current 8 user stories and the comprehensive requirements we just
   4. Cleanup is low-value compared to core backtesting features
   5. Error Diagnosis is sufficiently covered by structured errors per FR-042
 
-/speckit.implement "Verify acceptance criteria. Implement incomplete phases. Run the tests yourself until there are blocking issues that need my external intervention, then document the issue using 'gh issue create'. Once the issue is created, you may proceed to the next phase unless it is blocked by the untested phase. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. "
-
 Open needs (US1 still incomplete): artifacts/persistence (T042–T044), CLI (T045–T051), config precedence/error handling, and richer fallback logic for T028b if required by spec (auto fallback + heavy_tail_warning flag). Unstaged file: planning/project_overview.md untouched. Let me know if you want me to proceed with CLI/artifacts next.
 
 OK.  I read through planning/Stock_Candidate_Screening_README.md.  We need to update the spec.md and the tasks.md for US4.  In addition to an optional CSV input, the quant_scenario_engine.cli.main screen method should take a comma delimited list of stocks and follow the same functional path as fetch, where it downloads to the data/ folder in a Parquet file and automatically updates the time series when a newer/longer interval is requested.  In all methods, if a time series interval is requested that is shorter than the existing downloaded Parquet file, then the shorter series is requested from the file using Parquet's time series built-in functionality.
+
+✅ Completed User Stories
+
+  US1 - Basic Monte Carlo (Phase 3) - COMPLETE
+  - ✅ Distribution fitting (Laplace, Student-T)
+  - ✅ MC path generation
+  - ✅ Stock & option strategies
+  - ✅ Black-Scholes pricing
+  - ✅ Metrics calculation
+  - ✅ compare CLI command
+
+  US4 - Screening/Candidate Selection (Phase 4) - COMPLETE
+  - ✅ Gap/volume selector
+  - ✅ Feature engineering (SMA, RSI, volume_z)
+  - ✅ Universe screening
+  - ✅ screen CLI Mode A (candidate selection)
+
+  US5 - Conditional Backtesting (Phase 5) - COMPLETE
+  - ✅ Episode extraction
+  - ✅ Conditional vs unconditional comparison
+  - ✅ screen CLI Mode B/C (strategy screening)
+  - ✅ conditional CLI command
+  - ✅ Selector YAML loading
+
+  ❌ Still Needed - NOT Obsolete!
+
+  US2 - Parameter Grid Optimization (Phase 6)
+
+  Status: Not started (T074-T082)
+
+  Why still needed: You haven't implemented parameter optimization yet! This is about finding the best strategy parameters.
+
+  Example:
+  # Not implemented - would test multiple parameter combinations
+  grid --strategy stock_sma_trend \
+    --params "short_window: [5,10,20], long_window: [50,100,200]" \
+    --objective sharpe --top 10
+
+  Different from US5 because: US5 screens symbols for a given strategy. US2 optimizes strategy parameters across all symbols.
+
+  ---
+  US6 - Conditional Monte Carlo (Phase 7)
+
+  Status: Not started (T083-T090)
+
+  Why still needed: You're doing historical backtests, NOT forward-looking Monte Carlo!
+
+  Critical difference:
+  - Current (US5): "How did this strategy perform on past gap-down events?"
+  - US6: "Given a gap-down is happening RIGHT NOW, what are 1000 possible outcomes over the next 60 days?"
+
+  Example:
+  # Not implemented - would simulate futures from current state
+  conditional --mode monte_carlo \
+    --state '{"gap_pct": -5.0, "volume_z": 2.5}' \
+    --paths 1000 --steps 60 \
+    --strategy stock_basic
+
+  This is the core value proposition - forward-looking risk analysis, not backward-looking performance measurement!
+
+  ---
+  US7 - Config-Driven Components (Phase 8)
+
+  Status: Not started (T091-T101)
+
+  Why still needed: You're hardcoding everything right now. Need:
+  - YAML config files for strategies
+  - Swappable data sources (yfinance → Schwab)
+  - Swappable distributions (Laplace → Student-T → Normal)
+  - Environment variable support
+
+  Example:
+  # config.yaml - NOT IMPLEMENTED
+  data_source: schwab
+  distribution: student_t
+  option_pricer: py_vollib
+  strategies:
+    - name: custom_sma
+      params: {short: 10, long: 50}
+
+  ---
+  US3 - Enhanced Feature Engineering (Phase 9)
+
+  Status: Partially done (T102-T110 not started)
+
+  Why still needed: You have basic features (SMA, RSI), but not:
+  - Dynamic indicator registry (add new indicators via config)
+  - Macro series integration (VIX, interest rates, sector ETFs)
+  - Strategy feature usage tracking
+
+  Example:
+  # indicators.yaml - NOT IMPLEMENTED
+  custom_indicators:
+    - name: vix_ratio
+      source: ^VIX
+      transform: rolling_zscore(20)
+    - name: sector_relative
+      source: XLF
+      transform: price_ratio(SPY)
+
+  ---
+  US8 - Replay & Provenance (Phase 10)
+
+  Status: Not started (T111-T120)
+
+  Why still needed: You can't reproduce results yet!
+  - No --replay command to re-run old experiments
+  - No data drift detection
+  - No MC path persistence (regenerates every time)
+
+  Example:
+  # Not implemented - would exactly reproduce old run
+  replay --run-id 20241231_143022 \
+    --verify-data-fingerprint
+
+  Summary: What's Actually Obsolete?
+
+  NONE! The merging of US4 and US5 just means you have a unified screen command with three modes instead of separate commands. Every other
+   user story serves a distinct purpose:
+
+  | Story | Purpose                          | Status                   | Obsolete?                                |
+  |-------|----------------------------------|--------------------------|------------------------------------------|
+  | US1   | Basic MC simulation              | ✅ Done                   | No                                       |
+  | US2   | Parameter optimization           | ❌ Not started            | No - completely different from screening |
+  | US3   | Enhanced features                | 🟡 Partial               | No - only basics done                    |
+  | US4   | Candidate selection              | ✅ Done (merged with US5) | No                                       |
+  | US5   | Strategy screening               | ✅ Done (merged with US4) | No                                       |
+  | US6   | Conditional MC (forward-looking) | ❌ Not started            | No - this is your killer feature!        |
+  | US7   | Config system                    | ❌ Not started            | No - needed for modularity               |
+  | US8   | Reproducibility                  | ❌ Not started            | No - needed for research discipline      |
+
+  Key insight: You're doing historical backtesting right now. US6 (Conditional MC) is what gives you forward-looking risk analysis -
+  that's the whole point of Monte Carlo simulation!
+
+  /speckit.implement "Verify acceptance criteria for US5. Implement incomplete US6. Run the tests yourself until there are blocking issues that need my external intervention, then document the issue using 'gh issue create'. Once the issue is created, you may proceed to the next phase unless it is blocked by the untested phase. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. "
