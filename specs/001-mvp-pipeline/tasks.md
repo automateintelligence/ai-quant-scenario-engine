@@ -29,14 +29,14 @@ Per plan.md structure:
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create project directory structure per plan.md (quant-scenario-engine/{data,runs,schema,features,models,interfaces,backtesting/{distributions,mc},optimizer,pricing,strategies,simulation,cli,config,utils}, tests/{unit,integration,contract})
-- [ ] T002 Initialize Python 3.11 project with pyproject.toml and core dependencies (numpy, pandas, scipy, numba, statsmodels, arch, pandas-ta, quantstats, plotly, yfinance, typer, pytest)
-- [ ] T003 [P] Configure ruff linting and black formatting with settings in pyproject.toml
-- [ ] T004 [P] Setup mypy type checking configuration in pyproject.toml
-- [ ] T005 [P] Create .gitignore for Python (venv, __pycache__, *.pyc, .pytest_cache, runs/, data/historical/, data/features/)
-- [ ] T006 [P] Create README.md with quickstart instructions per plan.md onboarding section
-- [ ] T007 Create requirements-dev.txt with testing/dev dependencies (pytest, pytest-cov, pytest-mock, hypothesis, ruff, black, mypy) and setup pytest.ini with coverage config
-- [ ] T007a [P] Define performance budget benchmarks and add validation script (measure data load, fit, MC throughput, strategy eval) per FR-015 and FR-040 (scripts/benchmarks/perf_check.py)
+- [X] T001 Create project directory structure per plan.md (quant-scenario-engine/{data,runs,schema,features,models,interfaces,backtesting/{distributions,mc},optimizer,pricing,strategies,simulation,cli,config,utils}, tests/{unit,integration,contract})
+- [X] T002 Initialize Python 3.11 project with pyproject.toml and core dependencies (numpy, pandas, scipy, numba, statsmodels, arch, pandas-ta, quantstats, plotly, yfinance, typer, pytest)
+- [X] T003 [P] Configure ruff linting and black formatting with settings in pyproject.toml
+- [X] T004 [P] Setup mypy type checking configuration in pyproject.toml
+- [X] T005 [P] Create .gitignore for Python (venv, __pycache__, *.pyc, .pytest_cache, runs/, data/historical/, data/features/)
+- [X] T006 [P] Create README.md with quickstart instructions per plan.md onboarding section
+- [X] T007 Create requirements-dev.txt with testing/dev dependencies (pytest, pytest-cov, pytest-mock, hypothesis, ruff, black, mypy) and setup pytest.ini with coverage config
+- [X] T007a [P] Define performance budget benchmarks and add validation script (measure data load, fit, MC throughput, strategy eval) per FR-015 and FR-040 (scripts/benchmarks/perf_check.py)
 
 ---
 
@@ -46,33 +46,30 @@ Per plan.md structure:
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T008 Create base exception classes in quant-scenario-engine/exceptions.py (DataSourceError, DistributionFitError, ResourceLimitError, PricingError, EpisodeGenerationError, ConfigError, ConfigValidationError, ConfigConflictError, SchemaError, InsufficientDataError, TimestampAnomalyError, BankruptcyError, DependencyError per FR-041/042)
-- [ ] T009 [P] Implement logging configuration in quant-scenario-engine/utils/logging.py with structured JSON output per FR-039 (JSONFormatter with run_id, component, duration_ms, symbol, config_index tracking)
-- [ ] T010 [P] Create RunConfig dataclass in quant-scenario-engine/schema/run_config.py per data-model.md with validation (add covariance_estimator enum: sample/ledoit_wolf/shrinkage_delta, var_method enum: parametric/historical, lookback_window int per FR-034)
-- [ ] T011 [P] Create OptionSpec dataclass in quant-scenario-engine/models/options.py per data-model.md FR-016 (add iv_source enum: yfinance/realized_vol/config_default, early_exercise flag for American options)
-- [ ] T012 [P] Create StrategyParams dataclass in quant-scenario-engine/schema/strategy.py per data-model.md (add fees float ≥0 default 0.0005, slippage float ≥0 default 0.65 per FR-041)
-- [ ] T013 Create ReturnDistribution abstract base class in quant-scenario-engine/interfaces/distribution.py per data-model.md (add estimator enum: mle/gmm, loglik/aic/bic floats, fit_status enum: success/warn/fail, min_samples int ≥60 per FR-020/037)
-- [ ] T014 Create Strategy abstract base class in quant-scenario-engine/interfaces/strategy.py per data-model.md
-- [ ] T015 Create OptionPricer abstract base class in quant-scenario-engine/interfaces/pricing.py per data-model.md
-- [ ] T016 Create CandidateSelector abstract base class in quant-scenario-engine/interfaces/candidate_selector.py per FR-CAND-001
-- [ ] T017 [P] Implement resource estimator in quant-scenario-engine/utils/resources.py (estimate memory footprint for n_paths × n_steps, enforce FR-013/FR-018 thresholds: estimated_gb = n_paths*n_steps*8*1.1/1e9, thresholds <25% in-memory, ≥25% memmap, ≥50% abort)
-- [ ] T018 [P] Create run metadata schema in quant-scenario-engine/schema/run_meta.py with JSON serialization per FR-008/FR-019/FR-030/FR-034 (include covariance_estimator, var_method, lookback_window, storage_policy, drift_status, iv_source, parameter_stability fields)
-- [ ] T018a [P] Capture reproducibility context in run_meta (seeds, library versions, environment: CPU/RAM/OS, git commit SHA) per FR-021 and CHK139-CHK141
-- [ ] T019 [P] Setup Parquet data directory structure in data/{historical,features}/{interval}/{symbol}.parquet per DM-006
-- [ ] T020 Create storage policy selector in backtesting/mc/storage.py (decide memory vs npz vs memmap based on RAM threshold per DM-008/DM-010/DM-011, add estimated_gb tracking per plan.md)
-- [ ] T020a [P] Add Parquet schema validation and fingerprint computation in quant-scenario-engine/data/validation.py (DM-015, DM-016, FR-027, FR-028: validate OHLCV columns, compute content hash for drift detection)
-- [ ] T020b [P] Add missing-data tolerance enforcement (3× interval continuous gap, 1% total) and configurable imputation rules in data validation (FR-029, DM-017)
-- [ ] T020c [P] Ensure run_meta writes are atomic/immutable and record persistence usage (FR-030, FR-031, DM-018: atomic file writes, immutability validation, storage policy tracking)
-- [ ] T020d [P] Document resolution tier strategy (daily for distribution fitting, 5-min for backtesting, 1-min for live) and implement tier selection logic in data validation (DM-001, DM-002, DM-003)
+- [X] T008 Create base exception classes in quant-scenario-engine/exceptions.py (DataSourceError, DistributionFitError, ResourceLimitError, PricingError, EpisodeGenerationError, ConfigError, ConfigValidationError, ConfigConflictError, SchemaError, InsufficientDataError, TimestampAnomalyError, BankruptcyError, DependencyError per FR-041/042)
+- [X] T009 [P] Implement logging configuration in quant-scenario-engine/utils/logging.py with structured JSON output per FR-039 (JSONFormatter with run_id, component, duration_ms, symbol, config_index tracking)
+- [X] T010 [P] Create RunConfig dataclass in quant-scenario-engine/schema/run_config.py per data-model.md with validation (add covariance_estimator enum: sample/ledoit_wolf/shrinkage_delta, var_method enum: parametric/historical, lookback_window int per FR-034)
+- [X] T011 [P] Create OptionSpec dataclass in quant-scenario-engine/models/options.py per data-model.md FR-016 (add iv_source enum: yfinance/realized_vol/config_default, early_exercise flag for American options)
+- [X] T012 [P] Create StrategyParams dataclass in quant-scenario-engine/schema/strategy.py per data-model.md (add fees float ≥0 default 0.0005, slippage float ≥0 default 0.65 per FR-041)
+- [X] T013 Create ReturnDistribution abstract base class in quant-scenario-engine/interfaces/distribution.py per data-model.md (add estimator enum: mle/gmm, loglik/aic/bic floats, fit_status enum: success/warn/fail, min_samples int ≥60 per FR-020/037)
+- [X] T014 Create Strategy abstract base class in quant-scenario-engine/interfaces/strategy.py per data-model.md
+- [X] T015 Create OptionPricer abstract base class in quant-scenario-engine/interfaces/pricing.py per data-model.md
+- [X] T016 Create CandidateSelector abstract base class in quant-scenario-engine/interfaces/candidate_selector.py per FR-CAND-001
+- [X] T017 [P] Implement resource estimator in quant-scenario-engine/utils/resources.py (estimate memory footprint for n_paths × n_steps, enforce FR-013/FR-018 thresholds: estimated_gb = n_paths*n_steps*8*1.1/1e9, thresholds <25% in-memory, ≥25% memmap, ≥50% abort)
+- [X] T018 [P] Create run metadata schema in quant-scenario-engine/schema/run_meta.py with JSON serialization per FR-008/FR-019/FR-030/FR-034 (include covariance_estimator, var_method, lookback_window, storage_policy, drift_status, iv_source, parameter_stability fields)
+- [X] T018a [P] Capture reproducibility context in run_meta (seeds, library versions, environment: CPU/RAM/OS, git commit SHA) per FR-021 and CHK139-CHK141
+- [X] T019 [P] Setup Parquet data directory structure in data/{historical,features}/{interval}/{symbol}.parquet per DM-006
+- [X] T020 Create storage policy selector in backtesting/mc/storage.py (decide memory vs npz vs memmap based on RAM threshold per DM-008/DM-010/DM-011, add estimated_gb tracking per plan.md)
+- [X] T020a [P] Add Parquet schema validation and fingerprint computation in quant-scenario-engine/data/validation.py (DM-015, DM-016, FR-027, FR-028: validate OHLCV columns, compute content hash for drift detection)
+- [X] T020b [P] Add missing-data tolerance enforcement (3× interval continuous gap, 1% total) and configurable imputation rules in data validation (FR-029, DM-017)
+- [X] T020c [P] Ensure run_meta writes are atomic/immutable and record persistence usage (FR-030, FR-031, DM-018: atomic file writes, immutability validation, storage policy tracking)
+- [X] T020d [P] Document resolution tier strategy (daily for distribution fitting, 5-min for backtesting, 1-min for live) and implement tier selection logic in data validation (DM-001, DM-002, DM-003)
 - [ ] T020e [P] Enforce raw OHLCV vs derived features separation in Parquet storage (data/historical/{interval}/ vs data/features/{interval}/) per DM-005
 - [ ] T020f [P] Add Parquet historical data versioning support (_v2, _v3 suffixes) and retention policy documentation per DM-013
-- [ ] T020g [P] Create Universe/Watchlist/Live Set configuration schema (symbol tiers: Universe=daily+5min, Watchlist=daily+5min+features, Live=all resolutions) per DM-007
 - [ ] T020h Create DataLoader class in quant-scenario-engine/data/data_loader.py with cache-aside pattern per FR-085/086 (load_ohlcv with cache check, staleness detection per interval, incremental updates, metadata writes per plan.md lines 100-268)
 - [ ] T020i [P] Implement corporate action detection in DataLoader per FR-085 (fetch overlapping bar, compare cached_last_close vs fresh_close, trigger full refresh on >1% divergence with warning per plan.md lines 169-195)
 - [ ] T020j [P] Add force_refresh and allow_stale_cache flag support in DataLoader per FR-085/086 (force_refresh bypasses cache, allow_stale_cache uses stale on fetch failure per plan.md lines 132-136, 206-219)
-- [ ] T020k [P] Create component swap logging infrastructure in quant-scenario-engine/config/factories.py (FactoryBase with .create() logging at INFO: "Component loaded: type=X, name=Y, prior=Z" per FR-043 and plan.md lines 323-326)
-- [ ] T020l [P] Implement stationarity test utilities in backtesting/distributions/stationarity.py (ADF test, KPSS test, transformation recommendations per FR-002/037 and plan.md lecture references)
-- [ ] T020m [P] Implement AR detection utilities in backtesting/distributions/ar_detection.py (ACF/PACF analysis, AR preflight checks before IID fits per FR-002/037 and plan.md lecture references)
+- [X] T020g [P] Create Universe/Watchlist/Live Set configuration schema (symbol tiers: Universe=daily+5min, Watchlist=daily+5min+features, Live=all resolutions) per DM-007
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -844,3 +841,6 @@ With 3+ developers:
 - T051: Config precedence
 
 **Total**: ~150 tasks (up from 140), addressing all gaps in updated spec/plan/data-model
+- [X] T020k [P] Create component swap logging infrastructure in quant-scenario-engine/config/factories.py (FactoryBase with .create() logging at INFO: "Component loaded: type=X, name=Y, prior=Z" per FR-043 and plan.md lines 323-326)
+- [X] T020l [P] Implement stationarity test utilities in backtesting/distributions/stationarity.py (ADF test, KPSS test, transformation recommendations per FR-002/037 and plan.md lecture references)
+- [X] T020m [P] Implement AR detection utilities in backtesting/distributions/ar_detection.py (ACF/PACF analysis, AR preflight checks before IID fits per FR-002/037 and plan.md lecture references)
