@@ -334,8 +334,8 @@ def mock_run_config():
 - [X] T026 [P] [US1] Implement StudentTDistribution in backtesting/distributions/student_t.py with fit() and sample() per FR-002 (include stationarity preflight via T020l, AR detection via T020m, capture estimator metadata per T013)
 - [X] T027 [P] [US1] Create distribution factory in backtesting/distributions/factory.py to select model by config (laplace default, student_t optional, extend FactoryBase from T020k)
 - [X] T028 [US1] Implement distribution parameter validation in backtesting/distributions/validation.py per data-model.md (len(returns) >= min_samples check, seed validation)
-- [ ] T028a [US1] Add parameter bounds checking and implausible parameter rejection in backtesting/distributions/validation.py per FR-020/FR-037 (heavy-tail threshold: excess kurtosis ≥1.0; warn <0.5; reject implausible params; trigger fallback warnings)
-- [ ] T028b [US1] Implement convergence limits and fallback model logic in backtesting/distributions/validation.py per FR-020/FR-037 (detect fit failures, log warnings, fallback to simpler model with structured errors and heavy_tail_warning metadata)
+- [X] T028a [US1] Add parameter bounds checking and implausible parameter rejection in backtesting/distributions/validation.py per FR-020/FR-037 (heavy-tail threshold: excess kurtosis ≥1.0; warn <0.5; reject implausible params; trigger fallback warnings)
+- [X] T028b [US1] Implement convergence limits and fallback model logic in backtesting/distributions/validation.py per FR-020/FR-037 (detect fit failures, log warnings, fallback to simpler model with structured errors and heavy_tail_warning metadata)
 
 #### Monte Carlo Engine (US1)
 
