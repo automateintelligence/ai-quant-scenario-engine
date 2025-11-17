@@ -34,6 +34,7 @@ def screen(
     top: int | None = typer.Option(None, help="Top N candidates to keep"),
     max_workers: int = typer.Option(4, help="Max workers for screening"),
     output: Path = typer.Option(Path("runs"), help="Output directory for artifacts"),
+    lookback_years: float = typer.Option(None, help="Optional lookback horizon in years for universe data"),
 ) -> None:
     validate_screen_inputs(horizon=horizon, max_workers=max_workers)
     valid_intervals = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
@@ -71,6 +72,7 @@ def screen(
     enriched = {sym: enrich_ohlcv(g) for sym, g in grouped.items()}
 
     output.mkdir(parents=True, exist_ok=True)
+    # lookback_years currently informational; hook for future slicing logic
 
     # Mode A: selector-only
     if not strategy:

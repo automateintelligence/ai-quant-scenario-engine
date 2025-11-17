@@ -17,6 +17,7 @@ def fetch_symbol(symbol: str, start: str, end: str, interval: str, target: Path)
 
     df = df.reset_index()
     df.columns = df.columns.str.lower()
+    df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
     df["symbol"] = symbol
     df["interval"] = interval
 
@@ -34,7 +35,7 @@ def load_or_fetch(symbol: str, start: str, end: str, interval: str, target: Path
 
     if path.exists():
         df = pd.read_parquet(path, engine="pyarrow")
-        df["date"] = pd.to_datetime(df["date"])
+        df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None)
         min_date, max_date = df["date"].min(), df["date"].max()
         if start_ts < min_date or end_ts > max_date:
             df = fetch_symbol(symbol, start, end, interval, target)
@@ -62,4 +63,3 @@ def parse_symbol_list(raw: str) -> list[str]:
 
 
 __all__ = ["fetch_symbol", "load_or_fetch", "parse_symbol_list"]
-

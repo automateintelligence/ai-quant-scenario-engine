@@ -7,6 +7,11 @@ import pandas as pd
 
 # Typer stub to avoid dependency in this unit test
 typer_stub = types.SimpleNamespace(Option=lambda *args, **kwargs: None)
+class _Exit(Exception):
+    def __init__(self, code=1):
+        super().__init__(f"exit {code}")
+        self.code = code
+typer_stub.Exit = _Exit
 sys.modules.setdefault("typer", typer_stub)
 
 # yfinance stub for cache imports
