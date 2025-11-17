@@ -182,19 +182,78 @@ python -m quant_scenario_engine.cli.main compare \
 
 ---
 
-## Feature Requirements
+## Feature Computation System ✅
 
-**Current Gap**: RSI-based strategies require features to be passed in the `features` dict, but there's no feature calculation pipeline yet.
+**Implemented**: `quant_scenario_engine/features/technical.py` provides comprehensive technical indicator calculations.
 
-**Strategies requiring features**:
-- `stock_rsi_reversion`: needs `rsi` [n_paths, n_steps]
-- `option_atm_put_rsi`: needs `rsi` [n_paths, n_steps]
-- `option_atm_call_momentum` (optional): can use `iv_rank` [n_paths, n_steps]
+### Automatic Feature Computation
 
-**Next steps**:
-1. Add feature calculation module (e.g., `quant_scenario_engine/features/technical.py`)
-2. Calculate RSI from price paths before passing to strategies
-3. Add IV rank calculation for option strategies
+Features are **automatically computed** when running compare:
+- RSI strategies get RSI calculated automatically from price paths
+- Feature computation happens transparently in `run_compare()`
+- No manual feature calculation needed for standard workflows
+
+### Available Technical Indicators
+
+**Computed by `compute_all_features()`**:
+- **RSI**: Relative Strength Index (period 14)
+- **SMA**: Simple Moving Averages (20, 50, 200)
+- **EMA**: Exponential Moving Averages (12, 26)
+- **MACD**: Moving Average Convergence Divergence + signal + histogram
+- **Bollinger Bands**: Upper, middle, lower bands
+- **ATR**: Average True Range
+- **Stochastic**: %K and %D oscillators
+
+### Usage
+
+**Option 1: Automatic (Recommended)**
+```python
+result = run_compare(
+    stock_strategy="stock_rsi_reversion",  # Requires RSI
+    option_strategy="option_atm_put_rsi",  # Requires RSI
+    compute_features=True,  # Default: automatically computes all features
+    # ... other params ...
+)
+```
+
+**Option 2: Pre-computed Features**
+```python
+from quant_scenario_engine.features.technical import compute_all_features
+
+features = compute_all_features(price_paths, fillna=True)
+# Customize or add features here...
+
+result = run_compare(
+    features=features,  # Use pre-computed features
+    compute_features=False,
+    # ... other params ...
+)
+```
+
+**Option 3: Custom Features**
+```python
+from quant_scenario_engine.features.technical import compute_rsi
+
+features = {
+    "rsi": compute_rsi(price_paths, period=14),
+    # Add only what you need...
+}
+
+result = run_compare(
+    features=features,
+    compute_features=False,
+    # ... other params ...
+)
+```
+
+### Strategies Requiring Features
+
+| Strategy | Required Features | Optional Features |
+|----------|-------------------|-------------------|
+| `stock_rsi_reversion` | `rsi` | None |
+| `option_atm_put_rsi` | `rsi` | None |
+| `option_atm_call_momentum` | None | `iv_rank` (IV rank filter) |
+| All other strategies | None | None |
 
 ---
 
@@ -213,11 +272,19 @@ python -m quant_scenario_engine.cli.main compare \
 
 ## Files Added
 
+### Strategies
 1. `quant_scenario_engine/strategies/position_sizing.py` - Position sizing utilities
 2. `quant_scenario_engine/strategies/stock_sma_trend.py` - SMA trend following
 3. `quant_scenario_engine/strategies/stock_rsi_reversion.py` - RSI mean reversion
 4. `quant_scenario_engine/strategies/option_atm_call_momentum.py` - ATM call momentum
 5. `quant_scenario_engine/strategies/option_atm_put_rsi.py` - ATM put RSI
 
+### Feature Computation
+6. `quant_scenario_engine/features/technical.py` - Technical indicator calculations (RSI, SMA, EMA, MACD, Bollinger Bands, ATR, Stochastic)
+
+### Tests
+7. `tests/integration/test_strategies_with_features.py` - Integration tests for strategies with feature computation
+
 **Modified**:
 - `quant_scenario_engine/strategies/factory.py` - Registered new strategies
+- `quant_scenario_engine/simulation/compare.py` - Added automatic feature computation
