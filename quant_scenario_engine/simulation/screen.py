@@ -92,31 +92,33 @@ def run_strategy_screen(
         cond_metrics = None
         episode_count = None
         low_confidence = False
-    if selector:
-        episodes = selector.select(df.reset_index())
-        episode_count = len(episodes)
-        if episode_count < min_episodes:
-            low_confidence = True
-        cond_result = run_conditional_backtest(
-            df=df.reset_index(),
-            episodes=episodes,
-            stock_strategy=strategy,
+        comparison = None
+
+        if selector:
+            episodes = selector.select(df.reset_index())
+            episode_count = len(episodes)
+            if episode_count < min_episodes:
+                low_confidence = True
+            cond_result = run_conditional_backtest(
+                df=df.reset_index(),
+                episodes=episodes,
+                stock_strategy=strategy,
+            )
+            cond_metrics = cond_result.conditional
+            comparison = cond_result.comparison
+
+        rank_metric = getattr(cond_metrics or metrics_uncond, rank_by, None)
+        results.append(
+            SymbolScreenResult(
+                symbol=symbol,
+                metrics_unconditional=metrics_uncond,
+                metrics_conditional=cond_metrics,
+                episode_count=episode_count,
+                rank_metric=rank_metric,
+                low_confidence=low_confidence,
+                comparison=comparison if selector else None,
+            )
         )
-        cond_metrics = cond_result.conditional
-        comparison = cond_result.comparison
-    
-    rank_metric = getattr(cond_metrics or metrics_uncond, rank_by, None)
-    results.append(
-        SymbolScreenResult(
-            symbol=symbol,
-            metrics_unconditional=metrics_uncond,
-            metrics_conditional=cond_metrics,
-            episode_count=episode_count,
-            rank_metric=rank_metric,
-            low_confidence=low_confidence,
-            comparison=comparison if selector else None,
-        )
-    )
 
     results.sort(key=lambda r: r.rank_metric or float("-inf"), reverse=True)
     if top_n is not None:

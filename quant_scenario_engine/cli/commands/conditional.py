@@ -20,8 +20,8 @@ log = get_logger(__name__, component="cli_conditional")
 
 
 def conditional(
-    universe: str = typer.Option("", help="CSV path or list of symbols (e.g., ['AAPL','MSFT'])"),
-    symbols: str = typer.Option("", help="Comma-delimited symbols (alternative to --universe)"),
+    universe: str = typer.Option("", help="Path to CSV file with OHLCV data"),
+    symbols: str = typer.Option("", help="Symbol list: ['AAPL','MSFT'] or AAPL,MSFT"),
     start: str = typer.Option(None, help="Start date YYYY-MM-DD when using symbols input"),
     end: str = typer.Option(None, help="End date YYYY-MM-DD when using symbols input"),
     interval: str = typer.Option("1d", help="Data interval"),
@@ -57,28 +57,39 @@ def conditional(
 
     grouped: dict[str, pd.DataFrame] = {}
     if universe:
+        # Universe must be a CSV file path
         path = Path(universe)
-        if path.exists():
-            df = pd.read_csv(path)
-            required = {"symbol", "date", "open", "high", "low", "close", "volume"}
-            missing = required - set(df.columns)
-            if missing:
-                raise typer.Exit(code=1)
-            df["date"] = pd.to_datetime(df["date"])
-            grouped = {sym: g.set_index("date").sort_index() for sym, g in df.groupby("symbol")}
-        else:
-            symbols = universe
+        if not path.exists():
+            log.error("universe CSV file not found", extra={"path": str(path)})
+            raise typer.Exit(code=1)
+        df = pd.read_csv(path)
+        required = {"symbol", "date", "open", "high", "low", "close", "volume"}
+        missing = required - set(df.columns)
+        if missing:
+            log.error("universe CSV missing required columns", extra={"missing": list(missing)})
+            raise typer.Exit(code=1)
+        df["date"] = pd.to_datetime(df["date"])
+        grouped = {sym: g.set_index("date").sort_index() for sym, g in df.groupby("symbol")}
 
-    if not grouped:
+    if not grouped and symbols:
         symbol_list = parse_symbol_list(symbols)
         if not symbol_list:
+            log.error("no valid symbols provided")
             raise typer.Exit(code=1)
         if not start or not end:
+            log.error("--start and --end are required when using --symbols")
             raise typer.Exit(code=1)
         for sym in symbol_list:
             df = load_or_fetch(sym, start=start, end=end, interval=interval, target=target)
             df = df.sort_values("date")
             grouped[sym] = df.set_index("date")
+
+    if not grouped:
+        if not universe and not symbols:
+            log.error("must provide either --universe (CSV file) or --symbols (ticker list)")
+            raise typer.Exit(code=1)
+        log.error("no symbols with data available")
+        raise typer.Exit(code=2)
 
     selector = GapVolumeSelector(gap_min=gap_min, volume_z_min=volume_z_min, horizon=horizon)
 
