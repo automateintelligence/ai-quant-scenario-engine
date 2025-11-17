@@ -2172,3 +2172,249 @@ This gives you:
 * All key classes and function signatures.
 * A CLI that runs a minimal single-path comparison for stock vs call strategy, which you can extend to full Monte Carlo and parameter sweeps.
 
+Scratchpad:
+I think ASSUME-004 is incorrect.  Historical data should be downloaded on-demand if it is not already available locally.
+
+/speckit.clarify "Read the 'specs/001-mvp-pipeline/checklists/pre-implementation.md', and check off each item in the checklist if the feature spec meets the criteria. Leave it empty if it does not."
+
+/speckit.plan "Make sure plan.md is updated to meet updated spec.md, which has been modified significantly, so be meticulous."
+
+Based only on the spec.md, plan.md, and tasks.md and not any non-defined assumptions, explain to be in plain language how the software will operate:
+1) How does the Monte Carlo simulation matrix get calculated and built for N=20 paths?
+2) Given a ticker symbol, a) how, from where, and what period of the price history retrieved, b) how is a distribution fit to the price history?  What are the parameters of the fit that can be adjusted?
+3) How do I define a strategy?  Would it be possible to use a ML model as part of a strategy?
+4) Enumerate any gaps in design due to non-defined assumptions.
+RESPONSE:
+Based on my analysis of the specification documents, I can explain how the software operates in plain language:
+
+  1) Monte Carlo Simulation Matrix (N=20 paths)
+
+  How it's built:
+
+  1. Historical Data Loading: The system loads historical OHLCV (Open, High, Low, Close, Volume) price data from a Parquet file
+  cache, fetching from yfinance if not cached (FR-001, FR-085)
+  2. Return Distribution Fitting:
+    - Calculates log returns from closing prices
+    - Fits a Laplace (double-exponential) distribution by default to these returns (FR-002)
+    - The fitting process:
+        - Checks for stationarity (non-stationary series rejected/transformed)
+      - Uses MLE (Maximum Likelihood Estimation) or GMM (Generalized Method of Moments)
+      - Records: estimator type, log-likelihood, AIC, BIC, convergence status
+      - Validates parameters aren't "implausible" (e.g., scale > 0, finite values)
+  3. Path Generation:
+    - Uses the fitted distribution to randomly sample log returns: shape = [n_paths=20, n_steps=60]
+    - Formula: log(S_t) = log(S_0) + cumsum(sampled_returns)
+    - Converts back to prices: S_t = exp(log(S_t))
+    - Result: 20 simulated price paths, each 60 steps long
+  4. Storage Decision:
+    - If 20 × 60 × 8 bytes × 1.1 < 25% of available RAM: keep in memory
+    - Otherwise: use memory-mapped files (memmap) or compressed .npz format
+
+  2) Price History Retrieval & Distribution Fitting
+
+  a) How, from where, and what period:
+
+  - From where: yfinance by default (Schwab API is optional/stub) - FR-001
+  - How:
+    - System checks local Parquet cache first (data/historical/{interval}/{symbol}.parquet)
+    - If cache miss or stale (>1 day old for daily data): fetches from yfinance with 3 retry attempts
+    - Supports incremental updates (appends new data to existing cache)
+    - Detects corporate actions (splits/dividends) via >1% price divergence on overlapping bars - triggers full refresh
+  - Period: User-configurable via CLI (start/end dates), typical default would be 5+ years for daily data
+
+  b) Distribution fitting & adjustable parameters:
+
+  Fit process (data-model.md lines 25-28):
+  - Input: Array of log returns from closing prices
+  - Minimum samples: 60 bars for Laplace/Student-T/Normal; 252 bars for GARCH-T (FR-032)
+  - Preflight checks:
+    - Stationarity test (non-stationary series rejected or transformed via differencing/detrending)
+    - Autocorrelation/AR model detection
+
+  Available models & parameters:
+  1. Laplace (default): {loc: float, scale: float > 0}
+  2. Student-T: {loc: float, scale: float > 0, df: int ∈ [2,100]}
+  3. Normal: {mean: float, std: float > 0}
+  4. GARCH-T (optional): GARCH volatility parameters + Student-T innovations
+
+  Adjustable configuration (plan.md lines 12-19):
+  - distribution_model: enum choice (laplace, student_t, normal, garch_t)
+  - fit_window: number of historical bars to use (e.g., 252 for 1 year daily)
+  - seed: random seed for reproducibility
+  - Convergence limits, parameter bounds enforced automatically
+
+  3) Defining Strategies & ML Model Integration
+
+  Strategy definition (data-model.md lines 11-12, 71-100):
+
+  A strategy is a Python class implementing the Strategy interface:
+
+  class Strategy(ABC):
+      def generate_signals(
+          self,
+          prices: pd.DataFrame,      # Price paths
+          features: pd.DataFrame,    # Technical indicators, optional features
+          params: Dict[str, Any]     # Strategy-specific parameters
+      ) -> StrategySignals:
+          # Returns: signals_stock, signals_option, option_spec, features_used
+
+  Output format:
+  - signals_stock: array of {-1, 0, 1} indicating short/flat/long positions
+  - signals_option: array of {-1, 0, 1} for option positions
+  - option_spec: strike, expiry, call/put, IV if using options
+  - features_used: list of feature column names consumed
+
+  ML model integration - YES, explicitly supported (FR-006, US3):
+  - Features can be injected via pandas-ta indicators (SMA, RSI, Bollinger Bands, etc.)
+  - Custom features can be added to the features DataFrame without modifying strategy engine code
+  - The spec does NOT prohibit ML models - a strategy could:
+    a. Accept trained model parameters in params dict
+    b. Use features DataFrame as input to model.predict()
+    c. Generate signals based on model output
+    d. However: no explicit ML training/inference infrastructure is specified - you'd need to bring your own model
+
+  4) Design Gaps Due to Non-Defined Assumptions
+
+  Critical Gaps:
+
+  1. Option Pricing IV Source (gap found):
+    - Spec requires "per-strike implied volatility" (FR-016)
+    - NOT DEFINED: Where IV comes from (historical volatility? IV surface API? user-provided?)
+    - data-model.md line 61 mentions "warning when IV source missing" but no specification of IV retrieval method
+  2. Strategy Signal Generation Logic:
+    - Spec defines interface but not implementation of any concrete strategies
+    - Only mentions "stock_basic" and "call_basic" in examples (data-model.md line 161-163)
+    - Gap: No specification of default/example strategy logic (e.g., mean reversion thresholds, momentum signals)
+  3. Feature Engineering Pipeline:
+    - FR-006 mentions "technical indicators via pandas-ta"
+    - Gap: No specification of:
+        - Which indicators are pre-computed vs on-demand
+      - How features are normalized/aligned across different timeframes
+      - Feature storage schema in Parquet files
+  4. Candidate Selector "Custom DSL" (FR-CAND-001):
+    - Mentions "YAML-based boolean/threshold expressions"
+    - Gap: No specification of DSL syntax, parser implementation, or validation rules
+    - Only gap/volume spike selector is fully specified
+  5. Conditional MC "Parametric Refit" (FR-CAND-005):
+    - Spec requires "parametric state-conditioned return model"
+    - Gap: No specification of:
+        - How state features condition the distribution parameters
+      - Whether this is a regression model, Bayesian update, or other method
+      - Minimum sample size for state-conditioned fits
+  6. Grid Objective Function Normalization (FR-083):
+    - Formula: w1*mean_pnl + w2*sharpe + w3*(-drawdown) + w4*(-cvar)
+    - States "each metric MUST be z-score normalized"
+    - Gap: Z-score across what population? All configs in grid? Historical baseline? Undefined reference distribution
+  7. Macro Series Alignment (FR-014):
+    - Mentions "interpolation to bar frequency" with "3× bar interval" tolerance
+    - Gap: Interpolation method not specified (linear? forward-fill? spline?)
+  8. Replay Data Drift Handling (FR-019, FR-046):
+    - Detects schema drift, row count changes, distribution shifts
+    - Gap: No specification of how to resolve drift (reject? warn and proceed? auto-migrate?)
+    - Only "refuse unless --allow_data_drift" is specified
+
+  Minor Gaps (Reasonable Defaults Inferable):
+
+  9. Slippage/Fees Model: StrategyParams includes fees and slippage fields but no specification of how they're applied
+  (per-trade? percentage of notional? flat per contract?)
+  10. Bankruptcy Path Handling: FR-050 says "abort with BankruptcyError" when all paths → 0, but doesn't specify partial
+  bankruptcy (e.g., 5 of 20 paths bankrupt)
+  11. Option Exercise Decision: No specification of early exercise logic for American options (spec assumes European via
+  Black-Scholes)
+  12. VPS Auto-Detection: ASSUME-001/002 require ≥20GB RAM and ≥4 cores, but no specification of behavior when running on smaller
+   machines (abort? warn? clamp parameters?)
+
+  Summary:
+
+  The most critical gap is #1 (implied volatility sourcing) - option strategies cannot function without IV, yet the spec provides
+   no retrieval mechanism. Gaps #2 and #4 (strategy implementations and custom DSL) would block US4 (screening) and conditional
+  flows. The rest are implementation details that could be reasonably inferred or documented during development.
+Clarifications:
+1. Option Pricing IV Source (gap found) - Can we download IV from yfinance or Schwab or other along with pricing and other
+  option greeks?
+  2. Strategy Signal Generation Logic - Can we specify with a simple "hello world" SMA cross-over strategy to hold skeleton
+  framework?
+  3. Feature Engineering Pipeline - we will figure out which features we can download and from where once we get MVP working, and
+  then we can determine which standard or custom features we will calculate.
+  4. Candidate Selector "Custom DSL" (FR-CAND-001) - place-holder ""hello world" logic is fine for now.  We may employ LLMs to help
+  use build the candidate selector criteria.
+  5. Conditional MC "Parametric Refit" (FR-CAND-005) - What is your recommendation?
+  6. Grid Objective Function Normalization (FR-083) - please perform web search for best practices on this topic.
+  7. Macro Series Alignment (FR-014)  Well this depends on the macro feature doesn't it.  Some change gradually, in which case we
+  would use a linear or spline or p-spline, but most macro features have discrete steps in time, like the Fed Rate, so we would
+  just interpolate constant values on the finer timescale.
+  8. Replay Data Drift Handling (FR-019, FR-046) - What is the best practice?
+  9. Slippage/Fees Model - What is the best practice?
+  10. Bankruptcy Path Handling - the whole point of multiple paths is to calculate stochastic likelihoods, so partial bankruptcies
+  should absolutely be included.
+  11. Option Exercise Decision - we should definitely allow early execution when a strategy indicates that the trading goals have
+  been met before expiration.
+  12. VPS Auto-Detection - not too worried about RAM, because the server RAM is already small, but auto-thread or -core detection
+  would be prudent before parallel processing. 
+
+TO DO:
+Looking at the current 8 user stories and the comprehensive requirements we just added, I believe the existing user stories are
+   sufficient for the MVP scope, but let me validate this with you by examining potential gaps:
+
+  Current Coverage (Well-Addressed)
+
+  ✅ Core Workflow: US1 (compare), US2 (grid), US3 (features)
+  ✅ Candidate-Driven Analysis: US4 (screening), US5 (conditional backtest), US6 (conditional MC)
+  ✅ Flexibility & Trust: US7 (config swapping), US8 (replay/provenance)
+
+  Potential Gaps to Consider
+
+  1. Data Ingestion & Preparation (Currently Pre-requisite)
+
+  Missing User Story: "As a user, I want to download and prepare historical OHLCV data for a universe of symbols so I can run
+  backtests."
+
+  Current State: ASSUME-004 states data is pre-downloaded. FR-001/FR-017 cover loading from Parquet, but not the ingestion
+  workflow itself.
+
+  Question: Should there be an explicit US9 for data ingestion, or is this intentionally out of MVP scope (manual ingestion via
+  scripts)?
+
+  2. Results Analysis & Comparison (Currently Manual)
+
+  Missing User Story: "As a user, I want to compare metrics across multiple historical runs to identify which configuration
+  changes improved performance."
+
+  Current State: US1/US2/US8 generate artifacts, but cross-run analysis is left to manual inspection or external tools.
+
+  Question: Is automated cross-run comparison needed for MVP, or acceptable as post-processing?
+
+  3. Configuration Management (Partially Covered)
+
+  Missing User Story: "As a user, I want to save, version, and share configuration templates for different strategy types."
+
+  Current State: US7 covers component swapping, FR-063/FR-064 cover versioning, but no workflow for config library management.
+
+  Question: Is this a "nice-to-have" for post-MVP, or critical for user productivity?
+
+  4. Artifact Cleanup & Maintenance (Policy-Driven)
+
+  Missing User Story: "As a user, I want to clean up old run artifacts to manage disk space without losing important results."
+
+  Current State: FR-065 defines cleanup policies, but no interactive workflow.
+
+  Question: Is manual cleanup (or auto-cleanup on next run) sufficient for MVP?
+
+  5. Error Diagnosis & Recovery (Implicitly Covered)
+
+  Missing User Story: "As a user, I want to diagnose why my run failed and get actionable guidance to fix the issue."
+
+  Current State: SC-019-SC-022 ensure structured errors with fix suggestions; logs provide traceability.
+
+  Question: Is this adequately covered by error messages + logs, or does it need a dedicated "diagnostic mode" user story?
+
+  ---
+  My Recommendation
+
+  Keep the existing 8 user stories for MVP because:
+
+  1. Data Ingestion can be a Phase 0 setup script (not interactive CLI workflow)
+  2. Results Comparison can be post-MVP (users can manually compare JSON outputs)
+  3. Config Management is addressed by version control (users can git their YAML configs)
+  4. Cleanup is low-value compared to core backtesting features
+  5. Error Diagnosis is sufficiently covered by structured errors per FR-042
