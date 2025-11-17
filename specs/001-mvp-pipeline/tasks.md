@@ -330,20 +330,20 @@ def mock_run_config():
 
 #### Distribution Models (US1)
 
-- [ ] T025 [P] [US1] Implement LaplaceDistribution in backtesting/distributions/laplace.py with fit() and sample() per FR-002 (default model, include stationarity preflight via T020l, capture estimator=mle, loglik, aic, bic per T013)
-- [ ] T026 [P] [US1] Implement StudentTDistribution in backtesting/distributions/student_t.py with fit() and sample() per FR-002 (include stationarity preflight via T020l, AR detection via T020m, capture estimator metadata per T013)
-- [ ] T027 [P] [US1] Create distribution factory in backtesting/distributions/factory.py to select model by config (laplace default, student_t optional, extend FactoryBase from T020k)
-- [ ] T028 [US1] Implement distribution parameter validation in backtesting/distributions/validation.py per data-model.md (len(returns) >= min_samples check, seed validation)
+- [X] T025 [P] [US1] Implement LaplaceDistribution in backtesting/distributions/laplace.py with fit() and sample() per FR-002 (default model, include stationarity preflight via T020l, capture estimator=mle, loglik, aic, bic per T013)
+- [X] T026 [P] [US1] Implement StudentTDistribution in backtesting/distributions/student_t.py with fit() and sample() per FR-002 (include stationarity preflight via T020l, AR detection via T020m, capture estimator metadata per T013)
+- [X] T027 [P] [US1] Create distribution factory in backtesting/distributions/factory.py to select model by config (laplace default, student_t optional, extend FactoryBase from T020k)
+- [X] T028 [US1] Implement distribution parameter validation in backtesting/distributions/validation.py per data-model.md (len(returns) >= min_samples check, seed validation)
 - [ ] T028a [US1] Add parameter bounds checking and implausible parameter rejection in backtesting/distributions/validation.py per FR-020/037 (reject params outside reasonable ranges per model, trigger fallback warnings)
 - [ ] T028b [US1] Implement convergence limits and fallback model logic in backtesting/distributions/validation.py per FR-020 (detect fit failures, log warnings, fallback to simpler model with structured errors)
 
 #### Monte Carlo Engine (US1)
 
-- [ ] T029 [US1] Implement generate_price_paths() in backtesting/mc/generator.py (s0, distribution, n_paths, n_steps, seed) per plan.md reference interface (log-return → price transform with overflow/non-positive rejection per FR-022)
-- [ ] T030 [P] [US1] Implement in-memory path storage in backtesting/mc/storage.py for footprint <25% RAM per DM-008
-- [ ] T030a [P] [US1] Add estimated_gb tracking in PricePath dataclass per plan.md and data-model.md (compute n_paths*n_steps*8*1.1/1e9, store in PricePath.estimated_gb field)
-- [ ] T031 [P] [US1] Implement memmap/npz fallback in backtesting/mc/storage.py for footprint ≥25% RAM per DM-011/FR-013 (warn user on memmap activation, abort if ≥50% RAM)
-- [ ] T032 [US1] Add seeded random number generation with reproducibility guarantee per FR-012 (ensure all np.random calls use Generator with seed, validate deterministic output)
+- [X] T029 [US1] Implement generate_price_paths() in backtesting/mc/generator.py (s0, distribution, n_paths, n_steps, seed) per plan.md reference interface (log-return → price transform with overflow/non-positive rejection per FR-022)
+- [X] T030 [P] [US1] Implement in-memory path storage in backtesting/mc/storage.py for footprint <25% RAM per DM-008
+- [X] T030a [P] [US1] Add estimated_gb tracking in PricePath dataclass per plan.md and data-model.md (compute n_paths*n_steps*8*1.1/1e9, store in PricePath.estimated_gb field)
+- [X] T031 [P] [US1] Implement memmap/npz fallback in backtesting/mc/storage.py for footprint ≥25% RAM per DM-011/FR-013 (warn user on memmap activation, abort if ≥50% RAM)
+- [X] T032 [US1] Add seeded random number generation with reproducibility guarantee per FR-012 (ensure all np.random calls use Generator with seed, validate deterministic output)
 
 #### Option Pricing (US1)
 
