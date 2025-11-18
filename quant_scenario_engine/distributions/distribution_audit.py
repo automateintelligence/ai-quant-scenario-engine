@@ -39,6 +39,7 @@ from quant_scenario_engine.distributions.fitters.laplace_fitter import LaplaceFi
 from quant_scenario_engine.distributions.fitters.student_t_fitter import StudentTFitter
 from quant_scenario_engine.distributions.metrics.information_criteria import aic as calc_aic, bic as calc_bic
 from quant_scenario_engine.distributions.models import FitResult
+from quant_scenario_engine.distributions.metrics.model_ranking import rank_by_information_criteria
 from quant_scenario_engine.exceptions import DistributionFitError
 from quant_scenario_engine.interfaces.distribution import ReturnDistribution
 from quant_scenario_engine.utils.logging import get_logger
