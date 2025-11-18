@@ -542,8 +542,8 @@ def mock_run_config():
 
 - [X] T138 [P] [US6a] Implement LaplaceFitter class in quant_scenario_engine/distributions/fitters/laplace_fitter.py with MLE estimation for location μ and scale b parameters per spec.md US6a AS1 (include convergence tracking, use scipy.stats.laplace.fit(), integrate with distribution_audit.py stub logic from T137)
 - [X] T139 [P] [US6a] Implement StudentTFitter class in quant_scenario_engine/distributions/fitters/student_t_fitter.py with MLE estimation for μ, σ, ν parameters per spec.md US6a AS1 (track iterations, convergence status, leverage T137 stub patterns)
-- [ ] T140 [US6a] Implement GARCHTFitter class in quant_scenario_engine/distributions/fitters/garch_t_fitter.py with MLE for ω, α, β, ν and standardized residuals z_t = r_t / σ̂_t per spec.md US6a AS1 (use arch library, extract residuals, integrate T137 methodology)
-- [ ] T141 [P] [US6a] Create stationarity validation module in quant_scenario_engine/distributions/validation/stationarity.py checking minimum sample sizes (Laplace ≥60, Student-t ≥60, GARCH-t ≥252) per FR-032/spec.md US6a AS1
+- [X] T140 [US6a] Implement GARCHTFitter class in quant_scenario_engine/distributions/fitters/garch_t_fitter.py with MLE for ω, α, β, ν and standardized residuals z_t = r_t / σ̂_t per spec.md US6a AS1 (use arch library, extract residuals, integrate T137 methodology)
+- [X] T141 [P] [US6a] Create stationarity validation module in quant_scenario_engine/distributions/validation/stationarity.py checking minimum sample sizes (Laplace ≥60, Student-t ≥60, GARCH-t ≥252) per FR-032/spec.md US6a AS1
 - [X] T142 [US6a] Implement FitResult dataclass in quant_scenario_engine/distributions/models.py capturing fitted parameters, convergence status, iterations, warnings per spec.md US6a AS1 (include model_type, params dict, converged bool, n_iterations, warnings list)
 
 #### Goodness-of-Fit Metrics (US6a AS2)
