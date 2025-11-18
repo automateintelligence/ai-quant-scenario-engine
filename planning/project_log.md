@@ -2620,6 +2620,9 @@ OK.  I read through planning/Stock_Candidate_Screening_README.md.  We need to up
   - Existing infrastructure: Uses data loading, log returns from Phase 2
 
 
-   /speckit.implement "Implement Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'"
+   /speckit.implement "Implement incomplete tasks for Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. Be sure to mark completed tasks in tasks.md."
 
    1) I committed the working tree, it is clean.  2) I want to be very careful with fallbacks for distribution fits.  If there is a reason that one of the models it not fitting, I want to see real-time feedback on that so it can be addressed, if possible.  Do not fall back to a poorly fit dictribution without any warnings.  
+
+
+   FYI - I added --plot-fit flag to distribution_audit.py.  Please implement wire audit selection into US1 compare path and add CLI audit command per spec tasks (T173-T179).

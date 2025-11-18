@@ -536,19 +536,19 @@ def mock_run_config():
 
 #### Foundation and Stub Integration (US6a)
 
-- [ ] T137 [US6a] Review and adapt existing distribution_audit.py stub in quant_scenario_engine/distributions/distribution_audit.py - NOTE: This file contains sophisticated model comparison logic that MUST be adapted to our framework, not rewritten. Extract existing fit testing methodology, statistical test implementations, and model comparison algorithms. Map existing functions to US6a acceptance scenarios (AS1-AS12) and plan integration with new modules below per spec.md US6a requirements
+- [X] T137 [US6a] Review and adapt existing distribution_audit.py stub in quant_scenario_engine/distributions/distribution_audit.py - NOTE: This file contains sophisticated model comparison logic that MUST be adapted to our framework, not rewritten. Extract existing fit testing methodology, statistical test implementations, and model comparison algorithms. Map existing functions to US6a acceptance scenarios (AS1-AS12) and plan integration with new modules below per spec.md US6a requirements
 
 #### Preprocessing and Model Fitting (US6a AS1)
 
-- [ ] T138 [P] [US6a] Implement LaplaceFitter class in quant_scenario_engine/distributions/fitters/laplace_fitter.py with MLE estimation for location μ and scale b parameters per spec.md US6a AS1 (include convergence tracking, use scipy.stats.laplace.fit(), integrate with distribution_audit.py stub logic from T137)
-- [ ] T139 [P] [US6a] Implement StudentTFitter class in quant_scenario_engine/distributions/fitters/student_t_fitter.py with MLE estimation for μ, σ, ν parameters per spec.md US6a AS1 (track iterations, convergence status, leverage T137 stub patterns)
+- [X] T138 [P] [US6a] Implement LaplaceFitter class in quant_scenario_engine/distributions/fitters/laplace_fitter.py with MLE estimation for location μ and scale b parameters per spec.md US6a AS1 (include convergence tracking, use scipy.stats.laplace.fit(), integrate with distribution_audit.py stub logic from T137)
+- [X] T139 [P] [US6a] Implement StudentTFitter class in quant_scenario_engine/distributions/fitters/student_t_fitter.py with MLE estimation for μ, σ, ν parameters per spec.md US6a AS1 (track iterations, convergence status, leverage T137 stub patterns)
 - [ ] T140 [US6a] Implement GARCHTFitter class in quant_scenario_engine/distributions/fitters/garch_t_fitter.py with MLE for ω, α, β, ν and standardized residuals z_t = r_t / σ̂_t per spec.md US6a AS1 (use arch library, extract residuals, integrate T137 methodology)
 - [ ] T141 [P] [US6a] Create stationarity validation module in quant_scenario_engine/distributions/validation/stationarity.py checking minimum sample sizes (Laplace ≥60, Student-t ≥60, GARCH-t ≥252) per FR-032/spec.md US6a AS1
-- [ ] T142 [US6a] Implement FitResult dataclass in quant_scenario_engine/distributions/models.py capturing fitted parameters, convergence status, iterations, warnings per spec.md US6a AS1 (include model_type, params dict, converged bool, n_iterations, warnings list)
+- [X] T142 [US6a] Implement FitResult dataclass in quant_scenario_engine/distributions/models.py capturing fitted parameters, convergence status, iterations, warnings per spec.md US6a AS1 (include model_type, params dict, converged bool, n_iterations, warnings list)
 
 #### Goodness-of-Fit Metrics (US6a AS2)
 
-- [ ] T143 [P] [US6a] Implement AIC/BIC computation in quant_scenario_engine/distributions/metrics/information_criteria.py calculating AIC = 2k - 2ℓ and BIC = k×log(n) - 2ℓ per spec.md US6a AS2 (check T137 stub for existing implementation)
+- [X] T143 [P] [US6a] Implement AIC/BIC computation in quant_scenario_engine/distributions/metrics/information_criteria.py calculating AIC = 2k - 2ℓ and BIC = k×log(n) - 2ℓ per spec.md US6a AS2 (check T137 stub for existing implementation)
 - [ ] T144 [P] [US6a] Create model ranking logic in quant_scenario_engine/distributions/metrics/model_ranking.py sorting models by AIC/BIC (lower is better) with interpretation guidance per spec.md US6a AS2
 - [ ] T145 [US6a] Add log-likelihood computation methods to each fitter class returning ℓ value per spec.md US6a AS2 (scipy.stats likelihood methods)
 
