@@ -2557,3 +2557,5 @@ OK.  I read through planning/Stock_Candidate_Screening_README.md.  We need to up
   that's the whole point of Monte Carlo simulation!
 
   /speckit.implement "Verify acceptance criteria for US5. Implement incomplete US6. Run the tests yourself until there are blocking issues that need my external intervention, then document the issue using 'gh issue create'. Once the issue is created, you may proceed to the next phase unless it is blocked by the untested phase. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. "
+
+   /speckit.implement "Implement Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'"
