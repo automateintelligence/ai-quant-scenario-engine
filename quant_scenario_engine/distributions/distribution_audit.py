@@ -5,6 +5,25 @@ Tools for fitting multiple return distribution models (Laplace, Student-T, GARCH
 evaluating their suitability for financial returns, and selecting a "best" model
 for Monte Carlo simulation based on tail behavior, VaR backtests, and volatility
 clustering.
+
+ADAPTATION STATUS (Per T137 - User Story 6a):
+This sophisticated stub must be adapted to align with spec.md US6a (lines 131-271)
+and tasks.md Phase 7a (T137-T182). The core architecture is sound, but specific
+modifications are needed to meet all acceptance scenarios (AS1-AS12).
+
+KEY ADAPTATIONS NEEDED:
+1. Preprocessing pipeline (AS1, T138-T142): Add stationarity checks, outlier detection
+2. Goodness-of-fit enhancements (AS2, T143-T145): Add excess kurtosis validation (≥1.0)
+3. Tail diagnostics (AS3, T146-T149): Add 99.5% quantile, comprehensive Q-Q plots
+4. VaR backtesting (AS4, T150-T155): Implement Kupiec/Christoffersen statistical tests
+5. Model selection scoring (AS6, T164-T168): Update weights to (0.2, 0.4, 0.3, 0.1)
+6. Caching layer (AS7, T169-T171): Add 30-day TTL cache with proper key structure
+7. Reproducibility (AS8, T172): Add deterministic seeding throughout
+8. Integration hooks (AS9-10, T173-T176): Auto-load validated models for US1/US6
+9. CLI command (T177-T179): Wire to audit-distributions command
+10. Enhanced error handling (AS11-12, T180-T182): Add convergence diagnostics
+
+See tasks.md Phase 7a for detailed implementation tasks.
 """
 
 from __future__ import annotations
@@ -18,6 +37,7 @@ import pandas as pd
 from quant_scenario_engine.distributions.fitters.garch_t_fitter import GarchTFitter
 from quant_scenario_engine.distributions.fitters.laplace_fitter import LaplaceFitter
 from quant_scenario_engine.distributions.fitters.student_t_fitter import StudentTFitter
+from quant_scenario_engine.distributions.metrics.information_criteria import aic as calc_aic, bic as calc_bic
 from quant_scenario_engine.distributions.models import FitResult
 from quant_scenario_engine.exceptions import DistributionFitError
 from quant_scenario_engine.utils.logging import get_logger
@@ -40,7 +60,14 @@ class ModelSpec:
 
 @dataclass
 class TailMetrics:
-    """Tail-focused diagnostics for empirical vs model-implied returns."""
+    """
+    Tail-focused diagnostics for empirical vs model-implied returns.
+
+    TODO [T146, AS3]: Add 99.5% quantile fields per spec.md US6a AS3:
+    - var_emp_995: float
+    - var_model_995: float
+    - tail_error_995: float
+    """
     model_name: str
     var_emp_95: float
     var_emp_99: float
@@ -90,7 +117,7 @@ class DistributionAuditResult:
     """Full audit of all candidate models for a single symbol/timeframe."""
     symbol: str
     models: List[ModelSpec]
-    fit_results: List[FitSummary]
+    fit_results: List[FitResult]  # Fixed: was FitSummary (typo)
     tail_metrics: List[TailMetrics]
     var_backtests: List[VarBacktestResult]
     simulation_metrics: List[SimulationMetrics]
@@ -112,6 +139,17 @@ def fit_candidate_models(
     heavy-tailed diagnostics.
 
     Returns a list of FitResult instances.
+
+    TODO [T138-T142, AS1]: Add preprocessing pipeline before fitting:
+    - T138: Stationarity checks (ADF test, warn if p > 0.05)
+    - T139: Outlier detection (clip at ±5σ or flag high leverage points)
+    - T140: Return normalization (ensure zero mean, log returns)
+    - T141: Minimum sample size validation (warn if n < 252 for GARCH-t)
+
+    TODO [T143-T145, AS2]: Enhance goodness-of-fit validation:
+    - T143: Add excess kurtosis check (must be ≥1.0 per spec.md US6a AS2)
+    - T144: Generate Q-Q plots for diagnostic output
+    - T145: Add KS test for distribution fit quality
     """
     n = len(returns)
     results: List[FitResult] = []
@@ -153,6 +191,13 @@ def compute_tail_metrics(
     """
     Compare empirical tail quantiles to model-implied tail quantiles using
     Monte Carlo or closed-form quantiles where available.
+
+    TODO [T146-T149, AS3]: Enhance tail diagnostics per spec.md US6a AS3:
+    - T146: Add 99.5% quantile to TailMetrics dataclass (currently only 95%, 99%)
+    - T147: Generate comprehensive Q-Q plots (not just error metrics)
+    - T148: Add tail error normalization: |model - empirical| / |empirical|
+    - T149: Create tail diagnostics report with visual plots and interpretation
+    - Update levels parameter default to (0.95, 0.99, 0.995)
     """
     tail_results: List[TailMetrics] = []
 
@@ -205,7 +250,23 @@ def run_var_backtests(
     """
     Perform VaR backtests on an out-of-sample segment using each model.
 
-    This is a stub: fill in Kupiec and Christoffersen tests as needed.
+    TODO [T150-T155, AS4]: Implement proper VaR backtesting per spec.md US6a AS4:
+    - T150: Implement 70/30 train/test splitter (currently train_fraction parameter)
+    - T151: Implement Kupiec unconditional coverage test:
+            H₀: breach frequency = expected
+            Test statistic: -2×log(L_restricted/L_unrestricted)
+            Reject if p < 0.05 (model mis-calibrated)
+    - T152: Implement Christoffersen independence test:
+            H₀: breaches are serially independent
+            Test statistic based on transition matrix
+            Reject if p < 0.05 (breaches cluster)
+    - T153: Implement one-step-ahead VaR predictor (not static VaR from train!)
+            For Student-t/Laplace: use μ_train, σ_train
+            For GARCH-t: use dynamic conditional volatility σ_t
+    - T154: Implement breach counter with proper test statistics
+    - T155: Create backtest results aggregator with pass/fail logic:
+            Pass if p ≥ 0.01 on at least one test (Kupiec OR Christoffersen)
+            Catastrophic failure if p < 0.01 on BOTH tests
     """
     results: List[VarBacktestResult] = []
 
@@ -214,9 +275,8 @@ def run_var_backtests(
             fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
 
             for level in levels:
-                # TODO: for each day in returns_test, compute predictive VaR_t
-                # Here we just illustrate aggregate breach calculation.
-                # Implement proper one-step-ahead forecast logic per model.
+                # TODO [T153]: Implement proper one-step-ahead forecast logic per model
+                # Current implementation uses static VaR - needs dynamic forecast!
 
                 # Placeholder: assume static VaR from train distribution
                 simulated = fitter.sample(n_paths=100_000, n_steps=1).reshape(-1)  # type: ignore[attr-defined]
@@ -227,11 +287,15 @@ def run_var_backtests(
                 n_obs = len(returns_test)
                 expected_breaches = (1.0 - level) * n_obs
 
-                # TODO: implement Kupiec and Christoffersen tests
+                # TODO [T151]: Implement Kupiec test with proper likelihood ratio statistic
                 kupiec_pvalue = 1.0  # placeholder
+
+                # TODO [T152]: Implement Christoffersen test with transition matrix
                 christoffersen_pvalue = 1.0  # placeholder
 
-                passed = True  # TODO: apply thresholds on p-values
+                # TODO [T155]: Apply proper pass/fail logic based on p-values
+                # Pass if p ≥ 0.01 on at least one test (not both < 0.01)
+                passed = True  # placeholder
 
                 results.append(
                     VarBacktestResult(
@@ -261,6 +325,24 @@ def simulate_paths_and_metrics(
     """
     Use each model to generate Monte Carlo paths and compute high-level
     realism metrics: volatility, clustering, drawdowns, extreme-move frequency.
+
+    TODO [T156-T163, AS5]: Enhance simulation realism validation per spec.md US6a AS5:
+    - T156: Ensure MC path generator uses deterministic seeding (reproducibility)
+    - T157: Annualized volatility calculator already implemented (line 315)
+    - T158: Autocorrelation calculator already implemented (lines 319-323)
+    - T159: Maximum drawdown calculator already implemented (lines 326-329)
+    - T160: Extreme move counter already implemented (lines 332-333)
+    - T161: Add historical metrics calculator on 252-day rolling windows:
+            Compute same statistics (vol, acf, drawdown, extreme moves) on historical data
+            Store as comparison baseline for model validation
+    - T162: Add distributional comparator:
+            Compare simulated vs historical metric distributions
+            Use KS test or chi-square for distribution similarity
+            Report systematic biases (model consistently over/under-estimates)
+    - T163: Create simulation realism report:
+            Generate histograms of simulated vs historical metrics
+            Flag models with systematic biases (e.g., always underestimates volatility)
+            Include visual diagnostics for interpretation
     """
     sim_results: List[SimulationMetrics] = []
 
@@ -322,10 +404,26 @@ def score_models(
     """
     Aggregate multiple diagnostics into a single score per model.
 
-    weights: e.g. {"aic": 0.2, "tail": 0.4, "var": 0.2, "cluster": 0.2}
+    TODO [T164-T168, AS6]: Update scoring to match spec.md US6a AS6:
+    - T164: Implement AIC normalization:
+            AIC_norm = (AIC - AIC_min) / (AIC_max - AIC_min)
+            Currently using raw -AIC (line 386)
+    - T165: Update composite scoring formula per spec:
+            score = w₁×(-AIC_norm) + w₂×(-tail_error_99) + w₃×(-VaR_backtest_penalty) + w₄×(-vol_cluster_error)
+            Note: Use tail_error_99 specifically (not average of 95% and 99%)
+            Note: VaR backtest penalty is NOT simple pass rate (see T155 for penalty calculation)
+    - T166: Implement constraint validator:
+            Excess kurtosis ≥ 1.0 (heavy-tailed requirement from AS2)
+            VaR backtest must not catastrophically fail BOTH tests (p < 0.01 on both)
+            Models failing constraints get score = -inf
+    - T167: Select highest-scoring model that meets all constraints
+    - T168: Generate selection report with rationale, evidence, and warnings
+
+    weights: Default per spec.md US6a AS6 should be {"aic": 0.2, "tail": 0.4, "var": 0.3, "cluster": 0.1}
+             (NOT 0.2, 0.4, 0.2, 0.2 as currently implemented)
     """
     if weights is None:
-        weights = {"aic": 0.2, "tail": 0.4, "var": 0.2, "cluster": 0.2}
+        weights = {"aic": 0.2, "tail": 0.4, "var": 0.3, "cluster": 0.1}  # Updated per spec
 
     # Index metrics by model_name for convenience
     fit_by_name = {fr.model_name: fr for fr in fit_results}
@@ -426,7 +524,7 @@ def select_best_model(
 def audit_distributions_for_symbol(
     symbol: str,
     price_series: pd.Series,
-    train_fraction: float = 0.8,
+    train_fraction: float = 0.8,  # TODO [T150]: Update default to 0.7 per spec.md US6a AS4
     candidate_models: Optional[Sequence[ModelSpec]] = None,
     s0_override: Optional[float] = None,
     require_heavy_tails: bool = True,
@@ -437,10 +535,49 @@ def audit_distributions_for_symbol(
     1. Compute log returns and split into train/test.
     2. Fit Laplace, Student-T, GARCH-T (or provided candidates).
     3. Compute AIC/BIC + heavy-tail diagnostics.
-    4. Compute tail metrics (VaR 95/99).
+    4. Compute tail metrics (VaR 95/99/99.5).
     5. Run VaR backtests on test window.
     6. Simulate paths and realism metrics.
     7. Score models and select the best.
+
+    TODO [T169-T172, AS7-8]: Add caching and reproducibility:
+    - T169: Implement cache manager with 30-day TTL
+            Cache key: (symbol, lookback_days, end_date, data_source)
+            Store in ~/.cache/quant_scenario_engine/distribution_audits/
+    - T170: Create audit result serializer (JSON format)
+            Include fitted parameters, validation metrics, selection decision
+    - T171: Add --force-refit flag support to bypass cache
+    - T172: Implement deterministic seeding throughout:
+            Set np.random.seed() and random.seed() at start of audit
+            Ensure reproducibility within 1e-6 tolerance
+
+    TODO [T173-T176, AS9-10]: Add integration hooks for US1/US6:
+    - T173: Create model loader that auto-loads cached validated models
+            Called from US1/US6 Monte Carlo workflows
+    - T174: Implement model metadata logger:
+            Record model type, fit date, validation scores in run_meta.json
+            Per FR-034 provenance requirements
+    - T175: Add cache age warning (suggest re-audit when > 30 days old)
+    - T176: Implement fallback handler:
+            If no audit exists, emit warning and use Laplace default
+            Mark run_meta with model_validated: false
+
+    TODO [T177-T179]: CLI command integration:
+    - T177: Create audit-distributions CLI command
+            Flags: --symbol, --lookback-days, --end-date, --force-refit
+    - T178: Wire CLI to this orchestrator function
+    - T179: Add audit results formatter (ranked models, scores, recommendation)
+
+    TODO [T180-T182, AS11-12]: Enhanced error handling:
+    - T180: Implement insufficient data handler:
+            Skip models when sample size < minimum (GARCH-t ≥252)
+            Emit warning, continue with other models
+    - T181: Create convergence failure handler:
+            Log diagnostics (optimizer state, gradient norms, Hessian condition)
+            Mark model "FAILED", continue with others
+    - T182: Implement audit failure logic:
+            Fail entire audit only if ALL three models fail to converge
+            Otherwise return partial results with warnings
     """
     prices = price_series.dropna().astype(float)
     if len(prices) < 100:
@@ -448,6 +585,8 @@ def audit_distributions_for_symbol(
 
     log_returns = np.log(prices / prices.shift(1)).dropna().values
 
+    # TODO [T150]: Update train_fraction default to 0.7 (70/30 split per spec.md US6a AS4)
+    # Currently defaults to 0.8 (80/20 split)
     n = len(log_returns)
     n_train = max(50, int(train_fraction * n))
     r_train = log_returns[:n_train]
