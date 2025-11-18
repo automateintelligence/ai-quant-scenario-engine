@@ -118,13 +118,155 @@ screen --universe sp500.csv --strategy stock_sma_trend --rank-by sharpe \
 ### User Story 6 - Conditional Monte Carlo from candidate states (Priority: P2)
 Author generates Monte Carlo paths that are specifically conditioned on a current candidate state (e.g., big gap with volume spike), runs stock vs option strategies over those paths, and reviews the conditional risk/reward distribution.
 
-**Why this priority**: Bridges real historical episodes and synthetic scenarios, allowing “what-if” analysis given today’s specific transient conditions.
+**Why this priority**: Bridges real historical episodes and synthetic scenarios, allowing "what-if" analysis given today's specific transient conditions.
 **Independent Test**: For a symbol and a chosen candidate state, run a conditional Monte Carlo CLI (e.g., 1,000 paths × 60 steps) and verify that the run uses the state-conditioned model and produces summary distributions for stock and option P&L.
 
 **Acceptance Scenarios**:
 1. **Given** a current candidate state vector (features at t₀) and a chosen conditioning method (episode resampling or state-conditioned distribution), **When** the user runs the conditional Monte Carlo command, **Then** the system generates simulated paths that reflect that state and computes stock and option metrics over those paths.
 2. **Given** the user supplies a fixed random seed, **When** the conditional Monte Carlo run is repeated with the same parameters, **Then** the path-level outcomes and summary metrics are identical (within numeric tolerances).
 3. **Given** the selected conditioning method cannot be applied (e.g., too few similar historical episodes), **When** the user runs the command, **Then** the system emits a clear warning and either falls back to a configured default model or aborts gracefully with an error.
+
+---
+
+### User Story 6a - Distribution Model Validation and Selection (Priority: P2)
+Author runs an automated distribution audit for a given ticker symbol to fit multiple return distribution models (Laplace, Student-t, GARCH-t), validates each model through comprehensive statistical tests, and receives a recommended "best fit" model based on empirical evidence of tail behavior, volatility clustering, and simulation realism—ensuring Monte Carlo paths in US1 and US6 reflect realistic market dynamics including black swans.
+
+**Why this priority**: No single distribution model is universally correct for all assets or market regimes. Empirical validation ensures Monte Carlo simulations are built on distributions that actually reproduce observed characteristics (fat tails, volatility clustering, extreme event frequency) rather than assuming a default model. This is foundational for US1 (basic Monte Carlo) and US6 (conditional Monte Carlo) to generate realistic stress test scenarios.
+
+**Independent Test**: For a liquid ticker (e.g., SPY) with 3 years of daily historical data, run the distribution audit CLI. Verify the system fits Laplace, Student-t, and GARCH(1,1)-t models, computes AIC/BIC, performs VaR backtesting with Kupiec/Christoffersen tests, validates simulation realism metrics, and outputs a ranked model comparison report with a clear recommendation and validation evidence.
+
+**Acceptance Scenarios**:
+
+**Preprocessing and Model Fitting:**
+
+1. **Given** a ticker symbol and a lookback window (e.g., 3–5 years), **When** the user runs the distribution audit command, **Then** the system:
+   - Loads historical OHLCV data for the specified period
+   - Computes log returns: r_t = log(P_t / P_{t-1}) using close prices
+   - Validates stationarity requirements (minimum sample size, no extreme outliers)
+   - Fits three candidate models via Maximum Likelihood Estimation (MLE):
+     * **Laplace** (double-exponential): Estimates location μ and scale b
+     * **Student-t**: Estimates location μ, scale σ, and degrees of freedom ν
+     * **GARCH(1,1)-t**: Estimates volatility parameters (ω, α, β) and residual degrees of freedom ν
+   - Extracts standardized residuals for GARCH-t: z_t = r_t / σ̂_t
+   - Records convergence status, number of iterations, and any fit warnings for each model
+
+**In-Sample Goodness-of-Fit:**
+
+2. **Given** fitted model parameters, **When** the system computes in-sample goodness-of-fit metrics, **Then** for each model it calculates and reports:
+   - Log-likelihood (ℓ)
+   - Akaike Information Criterion: AIC = 2k - 2ℓ (where k = number of parameters)
+   - Bayesian Information Criterion: BIC = k×log(n) - 2ℓ (where n = sample size)
+   - Model ranking by AIC and BIC (lower is better)
+   - Interpretation guidance: "Student-t AIC is 45 points lower than Laplace → strong evidence for Student-t"
+
+**Tail Fit Diagnostics:**
+
+3. **Given** fitted models and empirical return distributions, **When** the system performs tail fit diagnostics, **Then** it:
+   - Generates QQ plots comparing empirical quantiles vs model-predicted quantiles
+   - Focuses analysis on tail regions (beyond ±2σ)
+   - Computes empirical vs fitted tail quantiles at: 95%, 99%, 99.5% (for loss tail)
+   - Calculates tail error metric for each model:
+     * tail_error_99 = |VaR_model(0.99) - VaR_emp(0.99)| / |VaR_emp(0.99)|
+   - Computes excess kurtosis for empirical vs each fitted distribution
+   - Flags models where fitted kurtosis << empirical kurtosis (underestimating tail fatness)
+   - Validates heavy-tail requirement: excess kurtosis ≥ 1.0
+   - Outputs tail diagnostic summary with visual QQ plots and quantitative error metrics
+
+**VaR Backtesting (Out-of-Sample):**
+
+4. **Given** a 70/30 train/test split of historical data, **When** the system performs VaR backtesting, **Then** for each model it:
+   - Refits model parameters on training data only (70%)
+   - Generates one-step-ahead predictive VaR for each test day at 95% and 99% confidence
+   - Counts actual VaR breaches (days where realized return < predicted VaR)
+   - Computes expected breach frequency (5% for VaR₉₅, 1% for VaR₉₉)
+   - Performs **Kupiec unconditional coverage test**:
+     * H₀: Breach frequency matches expected frequency
+     * Reports test statistic, p-value, and pass/fail at α=0.05
+   - Performs **Christoffersen independence test**:
+     * H₀: VaR breaches are independent (not clustered)
+     * Reports test statistic, p-value, and pass/fail at α=0.05
+   - Flags models that systematically underpredict breach frequency or show clustered breaches
+   - Outputs backtest results table with breach counts, expected counts, test statistics, and diagnostic interpretation
+
+**Simulation Realism Validation:**
+
+5. **Given** each fitted model, **When** the system validates simulation realism, **Then** it:
+   - Generates 10,000 Monte Carlo paths × 252 steps (one trading year) per model
+   - Computes the following statistics for each simulated path:
+     * Annualized volatility: σ_annual = σ_daily × √252
+     * Autocorrelation of squared returns at lag 1: corr(r²_t, r²_{t-1}) (measures volatility clustering)
+     * Maximum drawdown: max percentage decline from peak
+     * Frequency of extreme single-day moves: count of |r_t| > 3% and |r_t| > 5%
+   - Computes the same statistics on historical rolling windows (e.g., 252-day windows)
+   - Compares distributions of simulated vs historical metrics:
+     * Volatility: Does simulated σ range match historical σ range?
+     * Clustering: Does simulated autocorr(r²) match historical autocorr(r²)?
+     * Drawdowns: Does simulated max DD distribution align with historical DDs?
+     * Extreme events: Does simulated frequency of >3%/5% moves match historical frequency?
+   - Reports systematic biases, e.g.:
+     * "Laplace simulations show 0.2% of days with |r| > 5%, but historical data shows 1.8% → tail too thin"
+     * "GARCH-t clustering metric matches historical (0.15 vs 0.14) ✓"
+   - Outputs simulation realism report with distributional comparisons and visual histograms
+
+**Model Selection and Scoring:**
+
+6. **Given** all validation metrics (AIC/BIC, tail errors, VaR backtest results, simulation realism), **When** the system computes model selection scores, **Then** it:
+   - Normalizes AIC values: AIC_norm = (AIC - AIC_min) / (AIC_max - AIC_min)
+   - Computes composite score for each model:
+     * score = w₁×(-AIC_norm) + w₂×(-tail_error_99) + w₃×(-VaR_backtest_penalty) + w₄×(-vol_cluster_error)
+     * Default weights: w₁=0.2, w₂=0.4, w₃=0.3, w₄=0.1 (prioritize tail accuracy and VaR calibration)
+   - Applies mandatory constraints:
+     * Excess kurtosis ≥ 1.0 (heavy-tailed requirement)
+     * VaR backtest must not catastrophically fail both Kupiec and Christoffersen tests (p < 0.01 on both)
+   - Selects the highest-scoring model that meets all constraints
+   - Documents selection rationale with evidence:
+     * "Selected Student-t (score: 0.87) over Laplace (0.62) and GARCH-t (0.79)"
+     * "Student-t: Best tail fit (1.2% error), passed VaR backtests, matched clustering"
+   - Warns if no model meets minimum standards:
+     * "WARNING: All models show excess kurtosis < 1.0. Consider longer lookback or data quality review."
+   - Stores selected model parameters and validation metadata in structured format (JSON)
+
+**Caching and Reproducibility:**
+
+7. **Given** a completed distribution audit for a symbol/lookback combination, **When** the results are stored, **Then** the system:
+   - Caches fitted parameters, validation metrics, and model selection decision
+   - Includes cache key: (symbol, lookback_days, end_date, data_source)
+   - Timestamps the cache entry
+   - On subsequent requests with matching cache key, returns cached results if < 30 days old
+   - Provides CLI flag `--force-refit` to bypass cache and recompute
+
+8. **Given** a fixed random seed and identical audit parameters, **When** the distribution audit is run multiple times, **Then**:
+   - All MLE-fitted parameters are identical (within 1e-6 tolerance)
+   - All test statistics (AIC, BIC, tail errors, Kupiec/Christoffersen p-values) are identical
+   - Model selection decision is identical
+   - Generated Monte Carlo paths (for simulation realism checks) are identical
+
+**Integration with Monte Carlo Workflows:**
+
+9. **Given** a validated distribution model from US6a audit, **When** the user runs US1 (basic Monte Carlo) or US6 (conditional Monte Carlo), **Then** the system:
+   - Automatically loads the cached validated model for the specified symbol
+   - Uses the empirically-selected model (Student-t or GARCH-t) instead of a hardcoded default
+   - Logs model metadata in run provenance: model type, fit date, validation scores
+   - Warns if cached validation is > 30 days old and suggests re-running audit
+   - Allows user override to specify a different model via CLI flag if desired
+
+10. **Given** no prior distribution audit exists for a symbol, **When** the user runs US1 or US6 without specifying a model, **Then** the system:
+    - Emits a warning: "No validated model found for AAPL. Using default Laplace model."
+    - Suggests running distribution audit: "Run `python -m quant_scenario_engine.cli audit-distributions --symbol AAPL` to validate models."
+    - Proceeds with Laplace as safe default but marks run metadata with `model_validated: false`
+
+**Error Handling and Edge Cases:**
+
+11. **Given** insufficient historical data for a model (e.g., GARCH-t requires ≥252 bars), **When** the audit attempts to fit that model, **Then** the system:
+    - Skips the model with a clear warning: "GARCH-t requires ≥252 bars, only 180 available. Skipping GARCH-t."
+    - Continues fitting other models (Laplace, Student-t)
+    - Documents the skip in the audit report
+
+12. **Given** MLE fitting fails to converge for a model (e.g., numerical instability), **When** the audit encounters convergence failure, **Then** the system:
+    - Logs convergence failure with diagnostic details (iterations, tolerance, error message)
+    - Marks that model as "FAILED" in the audit report
+    - Continues with other models
+    - Fails the entire audit only if all three models fail to converge
 
 ---
 
@@ -171,7 +313,7 @@ Author can inspect a run directory and reconstruct exactly how results were prod
 ### Functional Requirements
 
 - **FR-001**: System MUST load OHLCV for a symbol and date range from a pluggable data source (yfinance baseline; Schwab later), automatically downloading on-demand if not present in local cache, and validate presence of required columns. Local cache SHALL use Parquet format per DM-004 and be stored under `data/historical/{interval}/{symbol}.parquet`. On cache miss, system SHALL fetch from configured data source, validate, write to cache, then proceed with run.
-- **FR-002**: System MUST fit Laplacian (double-exponential) returns as the default heavy-tailed model and generate N Monte Carlo paths of length T from that fit; additional models (e.g., Student-T, GARCH-T) MAY be provided as alternatives. Fitting MUST record estimator type (MLE/GMM), convergence status, log-likelihood, AIC/BIC, and implausible-parameter checks per model; non-stationary series MUST be rejected or transformed prior to fit (stationarity/AR preflight required).
+- **FR-002**: System MUST fit Laplacian (double-exponential) returns as the default heavy-tailed model and generate N Monte Carlo paths of length T from that fit; additional models (e.g., Student-T, GARCH-T) MAY be provided as alternatives. Fitting MUST record estimator type (MLE/GMM), convergence status, log-likelihood, AIC/BIC, and implausible-parameter checks per model; non-stationary series MUST be rejected or transformed prior to fit (stationarity/AR preflight required). System SHOULD support comprehensive distribution validation and selection per **US6a** (Distribution Model Validation and Selection), including VaR backtesting, tail diagnostics, simulation realism checks, and empirical model scoring to determine the best-fit distribution for each symbol/lookback combination.
 - **FR-003**: System MUST run a stock strategy over generated paths, producing per-path equity curves and summary metrics (mean/median P&L, drawdown, VaR/CVaR, Sharpe/Sortino).
 - **FR-004**: System MUST run an option strategy over the same paths using an option pricer (Black-Scholes with configurable IV) and produce analogous metrics; option strategies MUST support strategy-driven early exercise hooks (e.g., `check_early_exercise`) to exit before expiry, using European pricing by default unless an American-capable pricer is configured.
 ```python
@@ -256,7 +398,7 @@ class BlackScholesPricer:
   - The system MUST cap concurrent workers (e.g., max_workers ≤ 6 on an 8-core VPS), reserve at least 2 cores for the OS, and abort the run (with structured error) when pre-run estimates exceed thresholds; if estimates are within limits but runtime exceeds, emit escalating warnings and stop remaining jobs.
 -  - Worker auto-detection MUST default to `max_workers = min(6, cores-2)` when unspecified.
 - **FR-019**: System MUST prevent replay when underlying historical data version has changed since `run_meta` (unless an explicit `--force-replay`/`allow_data_drift` flag is provided), and must record the drift status in the replay output; detected schema drift SHALL block replay, while count/distribution drift SHALL warn and honor `--allow_data_drift`. Drift decisions and data fingerprint deltas MUST be recorded in `run_meta`.
-- **FR-020**: System MUST enforce distribution parameter validation (per-model bounds, heavy-tail sanity checks) and fit convergence controls (max iterations, failure fallback to Laplace) with structured errors when validation fails.
+- **FR-020**: System MUST enforce distribution parameter validation (per-model bounds, heavy-tail sanity checks) and fit convergence controls (max iterations, failure fallback to Laplace) with structured errors when validation fails. Comprehensive validation methodology detailed in **US6a** (Distribution Model Validation and Selection).
 - **FR-021**: System MUST ensure reproducibility across seeded runs with numeric tolerance of ±1e-10 for path-level values; captures library versions, git SHA, system config (CPU/RAM/OS), and seed in `run_meta` and applies seeding to all MC operations (including conditional sampling).
 - **FR-022**: System MUST detect numeric overflow/underflow or non-positive prices during log-return → price transforms and abort with a structured error; paths producing NaN/inf or ≤0 prices SHALL be rejected (no silent clipping).
 - **FR-023**: System MUST apply a deterministic memory footprint estimator (`n_paths × n_steps × 8 bytes` plus 10% overhead) before MC execution and enforce storage policy selection based on the estimator (in-memory <25% RAM; memmap/npz ≥25%; abort ≥50%) with user-visible warnings; record the decision in `run_meta`.
@@ -268,14 +410,14 @@ class BlackScholesPricer:
 - **FR-029**: System MUST enforce missing-data tolerances: fail/run warning when continuous gaps exceed 3× bar interval or total missing bars exceed 1% of window unless an explicit imputation rule is configured.
 - **FR-030**: System MUST guarantee atomic, append-only writes of `run_meta.json` and artifacts; metadata is immutable after run completion.
 - **FR-031**: Storage policy for Monte Carlo datasets SHALL remain non-persistent by default (DM-009), but persistence is permitted when explicitly requested (replay) or required for memmap fallback; `run_meta` MUST record when persistence is used.
-- **FR-032**: System MUST enforce minimum sample sizes per distribution model (Laplace ≥60 bars, Student-T ≥60 bars, Normal ≥60 bars, GARCH-T ≥252 bars) and fail with structured error if unmet.
+- **FR-032**: System MUST enforce minimum sample sizes per distribution model (Laplace ≥60 bars, Student-T ≥60 bars, Normal ≥60 bars, GARCH-T ≥252 bars) and fail with structured error if unmet. See **US6a** for data preprocessing and model fitting requirements.
 - **FR-033**: Each CLI command (`compare`, `grid`, `screen`, `conditional`, `replay`) MUST validate all parameters against contracts/openapi.yaml and reject unknown/invalid parameters with a clear error.
 - **FR-034**: Artifacts MUST follow defined formats: metrics JSON/CSV schema, `run_meta.json` with provenance (seeds, versions, fingerprints, git SHA, system config), optional plots/HTML reports; schemas SHALL be versioned. Metrics MUST include VaR/CVaR (parametric + historical) with lookback window and estimator metadata; grid objectives MUST standardize candidate metrics (z-score) before weighting; metrics MUST report `bankruptcy_rate` (fraction of MC paths hitting ≤0) and early-exercise events when applicable.
 
 - **FR-041 (Slippage/Fees Defaults)**: StrategyParams MUST support fee/slippage parameters with conservative defaults of 5 bps per notional trade and $0.65 per option contract; application is per-fill unless overridden. Defaults and overrides MUST be recorded in run_meta and applied consistently across strategies.
 - **FR-035**: Candidate episodes MUST capture `(symbol, t0, horizon, state_features)` with horizon > 0; episode construction rules SHALL be documented and applied consistently across backtest and conditional MC.
 - **FR-036**: Conditional Monte Carlo SHALL support both bootstrap (non-parametric) and parametric refit methods; fallback order (bootstrap → refit → unconditional) MUST be documented and logged when taken. Selector sparsity MUST trigger a documented fallback (e.g., unconditional MC with warning).
-- **FR-037**: Distribution "implausible parameter" thresholds SHALL be defined per model (e.g., scale > 0 and finite; Student-T df ∈ [2, 100]; GARCH parameters within stationarity bounds) and violations must fail fast with structured errors; AR/stationarity diagnostics MUST be logged when applicable. Heavy-tailed validation SHALL require **excess kurtosis ≥ 1.0** for fitted distributions; emit `WARNING` if kurtosis < 0.5 but proceed with fit marked `heavy_tail_warning: true` in run_meta.
+- **FR-037**: Distribution "implausible parameter" thresholds SHALL be defined per model (e.g., scale > 0 and finite; Student-T df ∈ [2, 100]; GARCH parameters within stationarity bounds) and violations must fail fast with structured errors; AR/stationarity diagnostics MUST be logged when applicable. Heavy-tailed validation SHALL require **excess kurtosis ≥ 1.0** for fitted distributions; emit `WARNING` if kurtosis < 0.5 but proceed with fit marked `heavy_tail_warning: true` in run_meta. Comprehensive parameter validation, tail diagnostics, VaR backtesting, and model selection criteria detailed in **US6a** (Distribution Model Validation and Selection).
 - **FR-038**: Fail-fast is the default for invalid data/config/fits; recoverable fallbacks (e.g., secondary data source, unconditional MC) MUST emit warnings and record the fallback in logs and run_meta.
 - **FR-039**: Logging MUST be structured (JSON) and include at minimum timestamp, run_id, component, event, severity, duration (when applicable), and key parameters; long-running jobs MUST emit progress updates. **Enhanced audit trail** SHALL additionally include: user/process context (user_id, pid, hostname), data lineage tracking (source file paths with versions/timestamps for all loaded data), and per-field config source provenance (CLI flag, ENV var, or YAML file with path/line number) recorded in run_meta.
 - **FR-040**: Performance budgets MUST be documented and enforced: data load/fit/MC/strategy eval latencies, MC throughput targets, expected resource utilization, and grid scaling behavior; breaches MUST trigger structured warnings. **Performance threshold policy**: Emit `INFO` log when operation exceeds 1.5× documented budget, `WARNING` at 2× budget, and `ERROR` at 3× budget (ERROR blocks production deployment but not dev runs); apply to data loading, distribution fitting, MC simulation, and strategy evaluation. Performance measurement methodology SHALL be:
