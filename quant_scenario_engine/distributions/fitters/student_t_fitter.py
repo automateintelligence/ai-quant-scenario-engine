@@ -41,10 +41,10 @@ class StudentTFitter:
             warnings.append(f"fit_failed: {exc}")
             raise DistributionFitError(f"Student-T fit failed: {exc}") from exc
 
-    def sample(self, n_paths: int, n_steps: int) -> np.ndarray:
+    def sample(self, n_paths: int, n_steps: int, seed: int | None = None) -> np.ndarray:
         if not self.params:
             raise DistributionFitError("StudentTFitter.sample called before fit")
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         return rng.standard_t(self.params["df"], size=(n_paths, n_steps)) * self.params["scale"] + self.params["loc"]
 
     def log_likelihood(self) -> float:

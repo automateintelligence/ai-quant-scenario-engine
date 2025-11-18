@@ -51,10 +51,10 @@ class LaplaceFitter:
             warnings.append(f"fit_failed: {exc}")
             raise DistributionFitError(f"Laplace fit failed: {exc}") from exc
 
-    def sample(self, n_paths: int, n_steps: int) -> np.ndarray:
+    def sample(self, n_paths: int, n_steps: int, seed: int | None = None) -> np.ndarray:
         if not self.params:
             raise DistributionFitError("LaplaceFitter.sample called before fit")
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         return rng.laplace(self.params["loc"], self.params["scale"], size=(n_paths, n_steps))
 
     def log_likelihood(self) -> float:

@@ -46,7 +46,7 @@ class GarchTFitter:
         except Exception as exc:
             raise DistributionFitError(f"GARCH-T fit failed: {exc}") from exc
 
-    def sample(self, n_paths: int, n_steps: int):
+    def sample(self, n_paths: int, n_steps: int, seed: int | None = None):
         try:
             from arch import arch_model  # type: ignore
             import numpy as np
@@ -61,7 +61,7 @@ class GarchTFitter:
         nu = float(p.get("nu", 8.0))
         denom = max(1e-6, 1.0 - alpha1 - beta1)
         sigma = float(np.sqrt(omega / denom))
-        rng = np.random.default_rng()
+        rng = np.random.default_rng(seed)
         return rng.standard_t(df=nu, size=(n_paths, n_steps)) * sigma
 
     def log_likelihood(self) -> float:

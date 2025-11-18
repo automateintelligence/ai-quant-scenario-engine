@@ -716,7 +716,7 @@ def audit_distributions_for_symbol(
             }
             realism_reports[spec.name] = build_realism_report(sim_metrics, hist_metrics)
         except Exception as exc:
-            log.warning("realism metrics failed", extra={"model": spec.name, "error": str(exc)})
+            log.warning(f"Realism metrics failed for {spec.name}: {exc}", extra={"model": spec.name, "error": str(exc)})
 
     # Selection report using simple constraints (heavy-tail & VaR pass)
     constraints = {
