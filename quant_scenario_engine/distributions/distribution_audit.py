@@ -1,13 +1,4 @@
-"""
-distribution_audit.py
-
-Tools for fitting multiple return distribution models (Laplace, Student-T, GARCH-T),
-evaluating their suitability for financial returns, and selecting a "best" model
-for Monte Carlo simulation based on tail behavior, VaR backtests, and volatility
-clustering.
-
-Intended to be callable both as a library module and via a CLI wrapper.
-"""
+"""Distribution audit orchestration (US6a)."""
 
 from __future__ import annotations
 
@@ -17,10 +8,14 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from quant_scenario_engine.distributions.base import ReturnDistribution
-from quant_scenario_engine.distributions.laplace import LaplaceDistribution
-from quant_scenario_engine.distributions.student_t import StudentTDistribution
-from quant_scenario_engine.distributions.garch_student_t import GarchStudentTDistribution
+from quant_scenario_engine.distributions.fitters.garch_t_fitter import GarchTFitter
+from quant_scenario_engine.distributions.fitters.laplace_fitter import LaplaceFitter
+from quant_scenario_engine.distributions.fitters.student_t_fitter import StudentTFitter
+from quant_scenario_engine.distributions.models import FitResult
+from quant_scenario_engine.exceptions import DistributionFitError
+from quant_scenario_engine.utils.logging import get_logger
+
+log = get_logger(__name__, component="distribution_audit")
 
 
 # ---------------------------------------------------------------------------
@@ -32,22 +27,8 @@ from quant_scenario_engine.distributions.garch_student_t import GarchStudentTDis
 class ModelSpec:
     """Identifier and configuration used to build a distribution model."""
     name: str                  # "laplace", "student_t", "garch_t"
-    cls: type[ReturnDistribution]
+    cls: object
     config: Dict[str, object]  # hyperparams or fit settings
-
-
-@dataclass
-class FitResult:
-    """Basic fit diagnostics for a model on a given return series."""
-    model_name: str
-    log_likelihood: float
-    aic: float
-    bic: float
-    params: Dict[str, float]
-    excess_kurtosis: float
-    heavy_tailed: bool
-    fit_success: bool
-    fit_message: str = ""
 
 
 @dataclass
@@ -102,7 +83,7 @@ class DistributionAuditResult:
     """Full audit of all candidate models for a single symbol/timeframe."""
     symbol: str
     models: List[ModelSpec]
-    fit_results: List[FitResult]
+    fit_results: List[FitSummary]
     tail_metrics: List[TailMetrics]
     var_backtests: List[VarBacktestResult]
     simulation_metrics: List[SimulationMetrics]
@@ -118,8 +99,6 @@ class DistributionAuditResult:
 def fit_candidate_models(
     returns: np.ndarray,
     candidate_models: Sequence[ModelSpec],
-    heavy_tail_excess_kurtosis_threshold: float = 1.0,
-    heavy_tail_warning_threshold: float = 0.5,
 ) -> List[FitResult]:
     """
     Fit each candidate model to the return series and compute AIC/BIC and
@@ -131,41 +110,12 @@ def fit_candidate_models(
     results: List[FitResult] = []
 
     for spec in candidate_models:
-        model = spec.cls(**spec.config)
         try:
-            model.fit(returns)
-            log_like = model.log_likelihood(returns)  # Optional: define on interface
-            k = model.num_params()                   # Optional: define on interface
-
-            aic = 2 * k - 2 * log_like
-            bic = k * np.log(n) - 2 * log_like
-
-            # Compute empirical excess kurtosis for fitted residuals or returns
-            # TODO: define whether to use raw returns or model residuals
-            r_centered = returns - np.mean(returns)
-            m2 = np.mean(r_centered ** 2)
-            m4 = np.mean(r_centered ** 4)
-            kurtosis = m4 / (m2 ** 2) if m2 > 0 else np.nan
-            excess_kurtosis = kurtosis - 3.0 if np.isfinite(kurtosis) else np.nan
-
-            heavy_tailed = bool(
-                np.isfinite(excess_kurtosis) and excess_kurtosis >= heavy_tail_excess_kurtosis_threshold
-            )
-
-            results.append(
-                FitResult(
-                    model_name=spec.name,
-                    log_likelihood=log_like,
-                    aic=aic,
-                    bic=bic,
-                    params=model.get_params(),
-                    excess_kurtosis=excess_kurtosis,
-                    heavy_tailed=heavy_tailed,
-                    fit_success=True,
-                )
-            )
-
-        except Exception as exc:  # noqa: BLE001
+            fitter = spec.cls if hasattr(spec.cls, "fit") else spec.cls()
+            fitted: FitResult = fitter.fit(returns)  # type: ignore[call-arg]
+            results.append(fitted)
+        except DistributionFitError as exc:
+            log.warning("model fit failed", extra={"model": spec.name, "error": str(exc)})
             results.append(
                 FitResult(
                     model_name=spec.name,
@@ -173,9 +123,12 @@ def fit_candidate_models(
                     aic=float("inf"),
                     bic=float("inf"),
                     params={},
-                    excess_kurtosis=float("nan"),
+                    n=len(returns),
                     heavy_tailed=False,
                     fit_success=False,
+                    converged=False,
+                    error=str(exc),
+                    warnings=[str(exc)],
                     fit_message=str(exc),
                 )
             )
@@ -203,35 +156,35 @@ def compute_tail_metrics(
     }
 
     for spec in fitted_models:
-        model = spec.cls(**spec.config)
-        # NOTE: assume model is already fitted or re-fit as needed
-        # TODO: decide whether to pass fitted instance instead of spec
+        try:
+            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
+            # For simplicity, approximate tail quantiles via simulation of one-step returns
+            simulated = fitter.sample(n_paths=mc_paths, n_steps=mc_steps).reshape(-1)  # type: ignore[attr-defined]
 
-        # For simplicity, approximate tail quantiles via simulation of one-step returns
-        simulated = model.sample(n_paths=mc_paths, n_steps=mc_steps).reshape(-1)
+            var_model_95 = np.quantile(simulated, 1.0 - 0.95)
+            var_model_99 = np.quantile(simulated, 1.0 - 0.99)
 
-        var_model_95 = np.quantile(simulated, 1.0 - 0.95)
-        var_model_99 = np.quantile(simulated, 1.0 - 0.99)
+            var_emp_95 = emp_q[0.95]
+            var_emp_99 = emp_q[0.99]
 
-        var_emp_95 = emp_q[0.95]
-        var_emp_99 = emp_q[0.99]
+            def tail_err(emp: float, mod: float) -> float:
+                if emp == 0:
+                    return 0.0
+                return abs(mod - emp) / (abs(emp) + 1e-12)
 
-        def tail_err(emp: float, mod: float) -> float:
-            if emp == 0:
-                return 0.0
-            return abs(mod - emp) / (abs(emp) + 1e-12)
-
-        tail_results.append(
-            TailMetrics(
-                model_name=spec.name,
-                var_emp_95=var_emp_95,
-                var_emp_99=var_emp_99,
-                var_model_95=var_model_95,
-                var_model_99=var_model_99,
-                tail_error_95=tail_err(var_emp_95, var_model_95),
-                tail_error_99=tail_err(var_emp_99, var_model_99),
+            tail_results.append(
+                TailMetrics(
+                    model_name=spec.name,
+                    var_emp_95=var_emp_95,
+                    var_emp_99=var_emp_99,
+                    var_model_95=var_model_95,
+                    var_model_99=var_model_99,
+                    tail_error_95=tail_err(var_emp_95, var_model_95),
+                    tail_error_99=tail_err(var_emp_99, var_model_99),
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("tail metric calculation failed", extra={"model": spec.name, "error": str(exc)})
 
     return tail_results
 
@@ -250,41 +203,43 @@ def run_var_backtests(
     results: List[VarBacktestResult] = []
 
     for spec in fitted_models:
-        model = spec.cls(**spec.config)
-        # TODO: ensure model is fitted on returns_train
+        try:
+            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
 
-        for level in levels:
-            # TODO: for each day in returns_test, compute predictive VaR_t
-            # Here we just illustrate aggregate breach calculation.
-            # Implement proper one-step-ahead forecast logic per model.
+            for level in levels:
+                # TODO: for each day in returns_test, compute predictive VaR_t
+                # Here we just illustrate aggregate breach calculation.
+                # Implement proper one-step-ahead forecast logic per model.
 
-            # Placeholder: assume static VaR from train distribution
-            simulated = model.sample(n_paths=100_000, n_steps=1).reshape(-1)
-            var_level = np.quantile(simulated, 1.0 - level)
+                # Placeholder: assume static VaR from train distribution
+                simulated = fitter.sample(n_paths=100_000, n_steps=1).reshape(-1)  # type: ignore[attr-defined]
+                var_level = np.quantile(simulated, 1.0 - level)
 
-            breaches = returns_test < var_level
-            n_breaches = int(breaches.sum())
-            n_obs = len(returns_test)
-            expected_breaches = (1.0 - level) * n_obs
+                breaches = returns_test < var_level
+                n_breaches = int(breaches.sum())
+                n_obs = len(returns_test)
+                expected_breaches = (1.0 - level) * n_obs
 
-            # TODO: implement Kupiec and Christoffersen tests
-            kupiec_pvalue = 1.0  # placeholder
-            christoffersen_pvalue = 1.0  # placeholder
+                # TODO: implement Kupiec and Christoffersen tests
+                kupiec_pvalue = 1.0  # placeholder
+                christoffersen_pvalue = 1.0  # placeholder
 
-            passed = True  # TODO: apply thresholds on p-values
+                passed = True  # TODO: apply thresholds on p-values
 
-            results.append(
-                VarBacktestResult(
-                    model_name=spec.name,
-                    level=level,
-                    n_obs=n_obs,
-                    n_breaches=n_breaches,
-                    expected_breaches=expected_breaches,
-                    kupiec_pvalue=kupiec_pvalue,
-                    christoffersen_pvalue=christoffersen_pvalue,
-                    passed=passed,
+                results.append(
+                    VarBacktestResult(
+                        model_name=spec.name,
+                        level=level,
+                        n_obs=n_obs,
+                        n_breaches=n_breaches,
+                        expected_breaches=expected_breaches,
+                        kupiec_pvalue=kupiec_pvalue,
+                        christoffersen_pvalue=christoffersen_pvalue,
+                        passed=passed,
+                    )
                 )
-            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("VaR backtest failed", extra={"model": spec.name, "error": str(exc)})
 
     return results
 
@@ -303,46 +258,49 @@ def simulate_paths_and_metrics(
     sim_results: List[SimulationMetrics] = []
 
     for spec in fitted_models:
-        model = spec.cls(**spec.config)
-        r = model.sample(n_paths=paths, n_steps=steps)  # log returns
-        # Price paths
-        log_s = np.log(s0) + np.cumsum(r, axis=1)
-        prices = np.exp(log_s)
+        try:
+            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
+            r = fitter.sample(n_paths=paths, n_steps=steps)  # type: ignore[attr-defined]
+            # Price paths
+            log_s = np.log(s0) + np.cumsum(r, axis=1)
+            prices = np.exp(log_s)
 
-        # Daily returns on prices for metrics
-        px = prices
-        ret = np.diff(px, axis=1) / px[:, :-1]
+            # Daily returns on prices for metrics
+            px = prices
+            ret = np.diff(px, axis=1) / px[:, :-1]
 
-        annualized_vol = np.std(ret, axis=1, ddof=1) * np.sqrt(252.0)
-        mean_annual_vol = float(np.mean(annualized_vol))
+            annualized_vol = np.std(ret, axis=1, ddof=1) * np.sqrt(252.0)
+            mean_annual_vol = float(np.mean(annualized_vol))
 
-        # Volatility clustering: ACF of squared returns at lag 1
-        sq = ret ** 2
-        sq_mean = sq.mean(axis=1, keepdims=True)
-        num = np.mean((sq[:, 1:] - sq_mean) * (sq[:, :-1] - sq_mean), axis=1)
-        den = np.mean((sq - sq_mean) ** 2, axis=1)
-        acf1 = float(np.mean(num / (den + 1e-12)))
+            # Volatility clustering: ACF of squared returns at lag 1
+            sq = ret ** 2
+            sq_mean = sq.mean(axis=1, keepdims=True)
+            num = np.mean((sq[:, 1:] - sq_mean) * (sq[:, :-1] - sq_mean), axis=1)
+            den = np.mean((sq - sq_mean) ** 2, axis=1)
+            acf1 = float(np.mean(num / (den + 1e-12)))
 
-        # Max drawdown per path
-        roll_max = np.maximum.accumulate(px, axis=1)
-        dd = (px - roll_max) / roll_max
-        max_dd = dd.min(axis=1)
-        mean_max_dd = float(np.mean(max_dd))
+            # Max drawdown per path
+            roll_max = np.maximum.accumulate(px, axis=1)
+            dd = (px - roll_max) / roll_max
+            max_dd = dd.min(axis=1)
+            mean_max_dd = float(np.mean(max_dd))
 
-        # Extreme move frequencies
-        freq_3pct = float(np.mean(np.any(ret <= -0.03, axis=1)))
-        freq_5pct = float(np.mean(np.any(ret <= -0.05, axis=1)))
+            # Extreme move frequencies
+            freq_3pct = float(np.mean(np.any(ret <= -0.03, axis=1)))
+            freq_5pct = float(np.mean(np.any(ret <= -0.05, axis=1)))
 
-        sim_results.append(
-            SimulationMetrics(
-                model_name=spec.name,
-                mean_annualized_vol=mean_annual_vol,
-                acf_sq_returns_lag1=acf1,
-                mean_max_drawdown=mean_max_dd,
-                freq_gt_3pct_move=freq_3pct,
-                freq_gt_5pct_move=freq_5pct,
+            sim_results.append(
+                SimulationMetrics(
+                    model_name=spec.name,
+                    mean_annualized_vol=mean_annual_vol,
+                    acf_sq_returns_lag1=acf1,
+                    mean_max_drawdown=mean_max_dd,
+                    freq_gt_3pct_move=freq_3pct,
+                    freq_gt_5pct_move=freq_5pct,
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("simulation metrics failed", extra={"model": spec.name, "error": str(exc)})
 
     return sim_results
 
@@ -490,9 +448,9 @@ def audit_distributions_for_symbol(
 
     if candidate_models is None:
         candidate_models = [
-            ModelSpec(name="laplace", cls=LaplaceDistribution, config={}),
-            ModelSpec(name="student_t", cls=StudentTDistribution, config={}),
-            ModelSpec(name="garch_t", cls=GarchStudentTDistribution, config={}),
+            ModelSpec(name="laplace", cls=LaplaceFitter(), config={}),
+            ModelSpec(name="student_t", cls=StudentTFitter(), config={}),
+            ModelSpec(name="garch_t", cls=GarchTFitter(), config={}),
         ]
 
     fit_results = fit_candidate_models(r_train, candidate_models)
