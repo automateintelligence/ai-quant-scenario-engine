@@ -12,6 +12,8 @@ from quant_scenario_engine.exceptions import DistributionFitError
 class GarchTFitter:
     name = "garch_t"
     k = 4  # omega, alpha, beta, nu (rough estimate for criteria)
+    def __init__(self) -> None:
+        self._fit_params = None
 
     def fit(self, returns: np.ndarray) -> FitResult:
         ensure_min_samples(returns, self.name)
@@ -28,6 +30,7 @@ class GarchTFitter:
             converged_attr = getattr(res, "converged", None)
             converged = bool(converged_attr) if converged_attr is not None else bool(getattr(res, "convergence", 0) == 0)
             warnings: list[str] = []
+            self._fit_params = params
             return FitResult(
                 model_name=self.name,
                 log_likelihood=loglik,
@@ -51,10 +54,17 @@ class GarchTFitter:
             raise DistributionFitError(f"GARCH-T requires 'arch' package: {exc}") from exc
 
         # Use a simple stationary GARCH(1,1)-t parameter set if fit params unavailable
-        am = arch_model(None, vol="GARCH", p=1, o=0, q=1, dist="t", rescale=False)
-        params = np.array([0.00001, 0.05, 0.9, 8.0])  # omega, alpha[1], beta[1], nu
-        sim = am.simulate(params, nobs=n_steps, reps=n_paths)
-        return sim["data"]
+        am = arch_model(np.zeros(1), vol="GARCH", p=1, o=0, q=1, dist="t", rescale=False)
+        p = self._fit_params
+        if p:
+            params = np.array(list(p.values()), dtype=float)
+        else:
+            params = np.array([0.00001, 0.05, 0.9, 8.0], dtype=float)  # omega, alpha[1], beta[1], nu
+        data = np.zeros((n_paths, n_steps))
+        for i in range(n_paths):
+            sim = am.simulate(params, nobs=n_steps, burn=100)
+            data[i] = sim["data"]
+        return data
 
     def log_likelihood(self) -> float:
         raise DistributionFitError("GARCH-T log-likelihood not available (not implemented)")

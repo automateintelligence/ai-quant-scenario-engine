@@ -19,7 +19,8 @@ htmlcov/
 runs/
 data/historical/
 data/features/
-output/distribution_fits/*
+output/
+output/distribution_fits/
 
 # Editors
 .vscode/
