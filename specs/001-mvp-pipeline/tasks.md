@@ -526,6 +526,97 @@ def mock_run_config():
 
 ---
 
+## Phase 7a: User Story 6a - Distribution Model Validation and Selection (Priority: P2)
+
+**Goal**: Automated distribution audit for ticker symbols to fit multiple return distribution models (Laplace, Student-t, GARCH-t), validate through comprehensive statistical tests, and recommend best-fit model based on empirical evidence of tail behavior, volatility clustering, and simulation realism
+
+**Independent Test**: For SPY with 3 years of daily data, run distribution audit CLI. Verify system fits all three models, computes AIC/BIC, performs VaR backtesting with Kupiec/Christoffersen tests, validates simulation realism, and outputs ranked model comparison report with clear recommendation per spec.md US6a acceptance scenarios
+
+### Implementation for User Story 6a
+
+#### Foundation and Stub Integration (US6a)
+
+- [ ] T137 [US6a] Review and adapt existing distribution_audit.py stub in quant_scenario_engine/distributions/distribution_audit.py - NOTE: This file contains sophisticated model comparison logic that MUST be adapted to our framework, not rewritten. Extract existing fit testing methodology, statistical test implementations, and model comparison algorithms. Map existing functions to US6a acceptance scenarios (AS1-AS12) and plan integration with new modules below per spec.md US6a requirements
+
+#### Preprocessing and Model Fitting (US6a AS1)
+
+- [ ] T138 [P] [US6a] Implement LaplaceFitter class in quant_scenario_engine/distributions/fitters/laplace_fitter.py with MLE estimation for location μ and scale b parameters per spec.md US6a AS1 (include convergence tracking, use scipy.stats.laplace.fit(), integrate with distribution_audit.py stub logic from T137)
+- [ ] T139 [P] [US6a] Implement StudentTFitter class in quant_scenario_engine/distributions/fitters/student_t_fitter.py with MLE estimation for μ, σ, ν parameters per spec.md US6a AS1 (track iterations, convergence status, leverage T137 stub patterns)
+- [ ] T140 [US6a] Implement GARCHTFitter class in quant_scenario_engine/distributions/fitters/garch_t_fitter.py with MLE for ω, α, β, ν and standardized residuals z_t = r_t / σ̂_t per spec.md US6a AS1 (use arch library, extract residuals, integrate T137 methodology)
+- [ ] T141 [P] [US6a] Create stationarity validation module in quant_scenario_engine/distributions/validation/stationarity.py checking minimum sample sizes (Laplace ≥60, Student-t ≥60, GARCH-t ≥252) per FR-032/spec.md US6a AS1
+- [ ] T142 [US6a] Implement FitResult dataclass in quant_scenario_engine/distributions/models.py capturing fitted parameters, convergence status, iterations, warnings per spec.md US6a AS1 (include model_type, params dict, converged bool, n_iterations, warnings list)
+
+#### Goodness-of-Fit Metrics (US6a AS2)
+
+- [ ] T143 [P] [US6a] Implement AIC/BIC computation in quant_scenario_engine/distributions/metrics/information_criteria.py calculating AIC = 2k - 2ℓ and BIC = k×log(n) - 2ℓ per spec.md US6a AS2 (check T137 stub for existing implementation)
+- [ ] T144 [P] [US6a] Create model ranking logic in quant_scenario_engine/distributions/metrics/model_ranking.py sorting models by AIC/BIC (lower is better) with interpretation guidance per spec.md US6a AS2
+- [ ] T145 [US6a] Add log-likelihood computation methods to each fitter class returning ℓ value per spec.md US6a AS2 (scipy.stats likelihood methods)
+
+#### Tail Fit Diagnostics (US6a AS3)
+
+- [ ] T146 [P] [US6a] Implement QQ plot generation in quant_scenario_engine/distributions/diagnostics/qq_plots.py comparing empirical vs model quantiles focusing on ±2σ tails per spec.md US6a AS3 (use matplotlib/seaborn, leverage T137 stub visualizations)
+- [ ] T147 [P] [US6a] Create tail error metric calculator in quant_scenario_engine/distributions/diagnostics/tail_metrics.py computing tail_error_99 = |VaR_model(0.99) - VaR_emp(0.99)| / |VaR_emp(0.99)| at 95%, 99%, 99.5% quantiles per spec.md US6a AS3
+- [ ] T148 [P] [US6a] Implement excess kurtosis validation in quant_scenario_engine/distributions/diagnostics/kurtosis.py comparing fitted vs empirical kurtosis with ≥1.0 requirement per spec.md US6a AS3/FR-037
+- [ ] T149 [US6a] Create tail diagnostic report generator in quant_scenario_engine/distributions/diagnostics/tail_report.py aggregating QQ plots, tail errors, kurtosis checks per spec.md US6a AS3
+
+#### VaR Backtesting (US6a AS4)
+
+- [ ] T150 [US6a] Implement train/test splitter in quant_scenario_engine/distributions/backtesting/data_split.py creating 70/30 split per spec.md US6a AS4
+- [ ] T151 [P] [US6a] Implement Kupiec unconditional coverage test in quant_scenario_engine/distributions/backtesting/kupiec_test.py testing H₀: breach frequency matches expected with p-value at α=0.05 per spec.md US6a AS4 (check T137 stub for existing test implementation)
+- [ ] T152 [P] [US6a] Implement Christoffersen independence test in quant_scenario_engine/distributions/backtesting/christoffersen_test.py testing H₀: breaches are independent with p-value at α=0.05 per spec.md US6a AS4
+- [ ] T153 [US6a] Create VaR predictor in quant_scenario_engine/distributions/backtesting/var_predictor.py generating one-step-ahead VaR at 95%/99% confidence per spec.md US6a AS4 (refit on train, predict on test)
+- [ ] T154 [US6a] Implement breach counter in quant_scenario_engine/distributions/backtesting/breach_counter.py counting actual vs expected VaR breaches per spec.md US6a AS4
+- [ ] T155 [US6a] Create backtest results aggregator in quant_scenario_engine/distributions/backtesting/backtest_report.py compiling breach counts, test statistics, pass/fail, diagnostic interpretation per spec.md US6a AS4
+
+#### Simulation Realism Validation (US6a AS5)
+
+- [ ] T155 [US6a] Implement MC path generator for validation in quant_scenario_engine/distributions/validation/mc_path_generator.py generating 10,000 paths × 252 steps per model per spec.md US6a AS5
+- [ ] T156 [P] [US6a] Create annualized volatility calculator in quant_scenario_engine/distributions/validation/volatility_calc.py computing σ_annual = σ_daily × √252 per spec.md US6a AS5
+- [ ] T157 [P] [US6a] Implement autocorrelation calculator in quant_scenario_engine/distributions/validation/clustering_calc.py computing corr(r²_t, r²_{t-1}) for volatility clustering per spec.md US6a AS5
+- [ ] T158 [P] [US6a] Create maximum drawdown calculator in quant_scenario_engine/distributions/validation/drawdown_calc.py computing max percentage decline from peak per spec.md US6a AS5
+- [ ] T159 [P] [US6a] Implement extreme move counter in quant_scenario_engine/distributions/validation/extreme_moves.py counting |r_t| > 3% and |r_t| > 5% per spec.md US6a AS5
+- [ ] T160 [US6a] Create historical metrics calculator in quant_scenario_engine/distributions/validation/historical_metrics.py computing same statistics on 252-day rolling windows per spec.md US6a AS5
+- [ ] T161 [US6a] Implement distributional comparator in quant_scenario_engine/distributions/validation/distribution_compare.py comparing simulated vs historical metric distributions per spec.md US6a AS5
+- [ ] T162 [US6a] Create simulation realism report generator in quant_scenario_engine/distributions/validation/realism_report.py with histograms, systematic bias detection per spec.md US6a AS5
+
+#### Model Selection and Scoring (US6a AS6)
+
+- [ ] T163 [US6a] Implement AIC normalization in quant_scenario_engine/distributions/selection/normalize.py computing AIC_norm = (AIC - AIC_min) / (AIC_max - AIC_min) per spec.md US6a AS6
+- [ ] T164 [US6a] Create composite scoring function in quant_scenario_engine/distributions/selection/scorer.py implementing score = w₁×(-AIC_norm) + w₂×(-tail_error_99) + w₃×(-VaR_backtest_penalty) + w₄×(-vol_cluster_error) with default weights (0.2, 0.4, 0.3, 0.1) per spec.md US6a AS6
+- [ ] T165 [US6a] Implement constraint validator in quant_scenario_engine/distributions/selection/constraints.py enforcing excess kurtosis ≥1.0 and VaR backtest pass (p ≥ 0.01 on at least one test) per spec.md US6a AS6
+- [ ] T166 [US6a] Create model selector in quant_scenario_engine/distributions/selection/model_selector.py choosing highest-scoring model meeting constraints per spec.md US6a AS6
+- [ ] T167 [US6a] Implement selection report generator in quant_scenario_engine/distributions/selection/selection_report.py documenting rationale with evidence and warnings per spec.md US6a AS6
+
+#### Caching and Reproducibility (US6a AS7-8)
+
+- [ ] T168 [P] [US6a] Implement cache manager in quant_scenario_engine/distributions/cache/cache_manager.py with cache key (symbol, lookback_days, end_date, data_source) and 30-day TTL per spec.md US6a AS7
+- [ ] T169 [P] [US6a] Create audit result serializer in quant_scenario_engine/distributions/cache/serializer.py storing fitted parameters, validation metrics, selection decision as JSON per spec.md US6a AS7
+- [ ] T170 [US6a] Add --force-refit CLI flag support to bypass cache and recompute per spec.md US6a AS7
+- [ ] T171 [US6a] Implement deterministic seeding in all MLE fitters and MC generators ensuring reproducibility within 1e-6 tolerance per spec.md US6a AS8
+
+#### Integration with Monte Carlo Workflows (US6a AS9-10)
+
+- [ ] T172 [US6a] Create model loader in quant_scenario_engine/distributions/integration/model_loader.py auto-loading cached validated models for US1/US6 runs per spec.md US6a AS9
+- [ ] T173 [US6a] Implement model metadata logger in quant_scenario_engine/distributions/integration/metadata_logger.py recording model type, fit date, validation scores in run_meta.json per spec.md US6a AS9/FR-034
+- [ ] T174 [US6a] Add cache age warning in quant_scenario_engine/distributions/integration/cache_checker.py suggesting re-audit when cache > 30 days old per spec.md US6a AS9
+- [ ] T175 [US6a] Implement fallback handler in quant_scenario_engine/distributions/integration/fallback.py emitting warning and using Laplace default when no audit exists, marking run_meta with model_validated: false per spec.md US6a AS10
+
+#### CLI Command (US6a)
+
+- [ ] T176 [US6a] Create audit-distributions CLI command in quant_scenario_engine/cli/commands/audit_distributions.py accepting --symbol, --lookback-days, --end-date, --force-refit flags per spec.md US6a Independent Test
+- [ ] T177 [US6a] Wire audit CLI to DistributionAuditor orchestrator in quant_scenario_engine/distributions/distribution_audit.py coordinating all validation steps per spec.md US6a AS1-AS12
+- [ ] T178 [US6a] Add audit results output formatter in quant_scenario_engine/cli/formatters/audit_formatter.py displaying ranked models, scores, recommendation per spec.md US6a AS6
+
+#### Error Handling (US6a AS11-12)
+
+- [ ] T179 [P] [US6a] Implement insufficient data handler in quant_scenario_engine/distributions/errors/data_errors.py skipping models when sample size < minimum (GARCH-t ≥252) with warning per spec.md US6a AS11
+- [ ] T180 [P] [US6a] Create convergence failure handler in quant_scenario_engine/distributions/errors/convergence_errors.py logging diagnostics, marking model "FAILED", continuing with others per spec.md US6a AS12
+- [ ] T181 [US6a] Implement audit failure logic in quant_scenario_engine/distributions/distribution_audit.py failing entire audit only if all three models fail to converge per spec.md US6a AS12
+
+**Checkpoint**: User Story 6a complete - distribution models validated and selected through empirical evidence, integrated with US1/US6 Monte Carlo workflows
+
+---
+
 ## Phase 8: User Story 7 - Config-driven component swapping (Priority: P2)
 
 **Goal**: Change configuration (YAML/env/CLI flags) to swap data sources, distribution models, option pricers without code edits
