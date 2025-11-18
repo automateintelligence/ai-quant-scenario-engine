@@ -589,10 +589,10 @@ def mock_run_config():
 
 #### Caching and Reproducibility (US6a AS7-8)
 
-- [ ] T169 [P] [US6a] Implement cache manager in quant_scenario_engine/distributions/cache/cache_manager.py with cache key (symbol, lookback_days, end_date, data_source) and 30-day TTL per spec.md US6a AS7
-- [ ] T170 [P] [US6a] Create audit result serializer in quant_scenario_engine/distributions/cache/serializer.py storing fitted parameters, validation metrics, selection decision as JSON per spec.md US6a AS7
-- [ ] T171 [US6a] Add --force-refit CLI flag support to bypass cache and recompute per spec.md US6a AS7
-- [ ] T172 [US6a] Implement deterministic seeding in all MLE fitters and MC generators ensuring reproducibility within 1e-6 tolerance per spec.md US6a AS8
+- [X] T169 [P] [US6a] Implement cache manager in quant_scenario_engine/distributions/cache/cache_manager.py with cache key (symbol, lookback_days, end_date, data_source) and 30-day TTL per spec.md US6a AS7
+- [X] T170 [P] [US6a] Create audit result serializer in quant_scenario_engine/distributions/cache/serializer.py storing fitted parameters, validation metrics, selection decision as JSON per spec.md US6a AS7
+- [X] T171 [US6a] Add --force-refit CLI flag support to bypass cache and recompute per spec.md US6a AS7
+- [X] T172 [US6a] Implement deterministic seeding in all MLE fitters and MC generators ensuring reproducibility within 1e-6 tolerance per spec.md US6a AS8
 
 #### Integration with Monte Carlo Workflows (US6a AS9-10)
 
