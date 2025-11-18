@@ -221,45 +221,67 @@ def plot_distribution_fits(
     ax_qq.set_aspect("equal", adjustable="box")
 
     # --- Panel 4: Left Tail Focus ---
-    # Focus on 5th percentile and below (extreme losses)
+    # Shows how well the model (fitted to all data) captures the left tail behavior
+    # Use full data histogram but zoom x-axis to tail region
     tail_threshold = np.quantile(hist_data, 0.10)
-    tail_data = hist_data[hist_data <= tail_threshold]
 
-    ax_tail.hist(tail_data, bins=30, density=True, alpha=0.3, color="darkred",
-                 label="Empirical (Left Tail)")
+    # Plot histogram of ALL data (not just tail) so scale matches model PDFs
+    ax_tail.hist(hist_data, bins=50, density=True, alpha=0.3, color="darkred",
+                 label="Empirical (All Data)")
 
-    tail_x_range = np.linspace(tail_data.min(), tail_threshold, 200)
+    # Define tail x-range for zooming and model evaluation
+    tail_min = hist_data.min()
+    tail_x_range = np.linspace(tail_min, tail_threshold, 200)
 
     for spec, fr in zip(candidate_models, fit_results):
         if not fr.fit_success:
             continue
 
         try:
-            fitter = spec.cls
-            samples = fitter.sample(n_paths=50000, n_steps=1).flatten()
-            tail_samples = samples[samples <= tail_threshold]
+            # Use actual PDF function instead of sample+KDE for better accuracy
+            if spec.name == "laplace":
+                from scipy.stats import laplace
+                loc = fr.params.get("loc", 0.0)
+                scale = fr.params.get("scale", 1.0)
+                tail_pdf = laplace.pdf(tail_x_range, loc=loc, scale=scale)
 
-            if len(tail_samples) > 10:
+            elif spec.name == "student_t":
+                from scipy.stats import t
+                df = fr.params.get("df", 5.0)
+                loc = fr.params.get("loc", 0.0)
+                scale = fr.params.get("scale", 1.0)
+                tail_pdf = t.pdf(tail_x_range, df=df, loc=loc, scale=scale)
+
+            elif spec.name == "garch_t":
+                # GARCH-t is conditional, so we sample and use larger sample for better tail estimate
+                fitter = spec.cls
+                samples = fitter.sample(n_paths=100000, n_steps=1).flatten()
+
+                # Use KDE with scott's bandwidth on full sample, then evaluate in tail
                 from scipy.stats import gaussian_kde
-                kde = gaussian_kde(tail_samples)
+                kde = gaussian_kde(samples, bw_method='scott')
                 tail_pdf = kde(tail_x_range)
+            else:
+                # Unknown model - skip
+                continue
 
-                # Get style for this model
-                style = model_styles.get(spec.name, default_style)
-                ax_tail.plot(
-                    tail_x_range, tail_pdf,
-                    label=spec.name.capitalize(),
-                    color=style["color"],
-                    linestyle=style["linestyle"],
-                    linewidth=2.5,
-                    alpha=0.9
-                )
+            # Get style for this model
+            style = model_styles.get(spec.name, default_style)
+            ax_tail.plot(
+                tail_x_range, tail_pdf,
+                label=spec.name.capitalize(),
+                color=style["color"],
+                linestyle=style["linestyle"],
+                linewidth=2.5,
+                alpha=0.9
+            )
         except Exception as e:
             log.warning(f"Failed to plot tail for {spec.name}: {e}")
 
     ax_tail.set_xlabel("Log Return")
     ax_tail.set_ylabel("Density")
     ax_tail.set_title("Left Tail Focus (Bottom 10% - Extreme Losses)")
+    ax_tail.set_xlim(tail_min, tail_threshold)  # Zoom x-axis to tail region only
     ax_tail.legend(loc="upper left", fontsize=9)
     ax_tail.grid(True, alpha=0.3)
 
