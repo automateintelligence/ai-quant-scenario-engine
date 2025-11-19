@@ -14,7 +14,6 @@ class GarchTFitter:
     k = 4  # omega, alpha, beta, nu (rough estimate for criteria)
     def __init__(self) -> None:
         self._fit_params = None
-        self._scale_factor = 1.0  # Rescaling factor from arch model
 
     def fit(self, returns: np.ndarray) -> FitResult:
         ensure_min_samples(returns, self.name)
@@ -24,7 +23,10 @@ class GarchTFitter:
             raise DistributionFitError(f"GARCH-T requires 'arch' package: {exc}") from exc
 
         try:
-            # Use rescaling for numerical stability (arch auto-rescales to ~unit variance)
+            # Estimate good starting values
+            vol_estimate = float(np.std(returns))
+
+            # Build model WITHOUT rescaling (keeps parameters in original scale)
             am = arch_model(
                 returns,
                 mean="Zero",  # Log returns should have near-zero mean
@@ -33,26 +35,33 @@ class GarchTFitter:
                 o=0,
                 q=1,
                 dist="t",
-                rescale=True,  # Enable auto-rescaling for numerical stability
+                rescale=False,  # Keep parameters in original scale
             )
 
-            # Fit with robust optimization settings
+            # Provide reasonable starting values
+            # omega: ~0.01 * var, alpha: 0.05-0.15, beta: 0.80-0.90, nu: 5-10
+            starting_values = np.array([
+                0.01 * vol_estimate ** 2,  # omega (small constant)
+                0.10,  # alpha[1] (ARCH effect)
+                0.85,  # beta[1] (GARCH effect)
+                6.0,   # nu (degrees of freedom for t-dist)
+            ])
+
+            # Fit with robust optimization settings and good starting point
             res = am.fit(
+                starting_values=starting_values,
                 update_freq=0,
                 disp="off",
                 show_warning=False,
                 options={
                     "maxiter": 1000,  # More iterations for convergence
-                    "ftol": 1e-8,     # Function tolerance
+                    "ftol": 1e-10,    # Tight tolerance
                 },
             )
 
-            # Extract parameters and scale factor
+            # Extract parameters (in original scale since rescale=False)
             params = {k: float(v) for k, v in res.params.items()}
             loglik = float(res.loglikelihood)
-
-            # Store the rescaling factor to convert back to original scale
-            self._scale_factor = float(res.scale)
 
             # Check convergence
             converged_attr = getattr(res, "converged", None)
@@ -136,23 +145,20 @@ class GarchTFitter:
         if persistence < 0.01:
             # Degenerate GARCH: fall back to i.i.d. Student-t with empirical volatility
             # Use omega as the variance estimate (since α+β ≈ 0 means σ² ≈ ω)
-            sigma_rescaled = float(np.sqrt(max(omega, 1e-8)))
+            sigma = float(np.sqrt(max(omega, 1e-8)))
         elif persistence >= 1.0:
             # Non-stationary: no unconditional variance exists
             # Use bounded approximation to avoid explosion
-            sigma_rescaled = float(np.sqrt(omega / 0.01))  # Cap persistence at 0.99
+            sigma = float(np.sqrt(omega / 0.01))  # Cap persistence at 0.99
         else:
             # Standard unconditional variance formula: σ² = ω / (1 - α - β)
-            # Note: omega, alpha, beta are in rescaled space
+            # Parameters are in original scale (rescale=False)
             denom = 1.0 - persistence
-            sigma_rescaled = float(np.sqrt(omega / denom))
-
-        # Convert back to original scale
-        sigma_original = sigma_rescaled * self._scale_factor
+            sigma = float(np.sqrt(omega / denom))
 
         # Generate i.i.d. Student-t samples with unconditional volatility
         rng = np.random.default_rng(seed)
-        return rng.standard_t(df=nu, size=(n_paths, n_steps)) * sigma_original
+        return rng.standard_t(df=nu, size=(n_paths, n_steps)) * sigma
 
     def log_likelihood(self) -> float:
         raise DistributionFitError("GARCH-T log-likelihood not available (not implemented)")
