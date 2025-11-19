@@ -14,6 +14,7 @@ class GarchTFitter:
     k = 4  # omega, alpha, beta, nu (rough estimate for criteria)
     def __init__(self) -> None:
         self._fit_params = None
+        self._scale_factor = 1.0  # Rescaling factor from arch model
 
     def fit(self, returns: np.ndarray) -> FitResult:
         ensure_min_samples(returns, self.name)
@@ -46,9 +47,12 @@ class GarchTFitter:
                 },
             )
 
-            # Extract parameters
+            # Extract parameters and scale factor
             params = {k: float(v) for k, v in res.params.items()}
             loglik = float(res.loglikelihood)
+
+            # Store the rescaling factor to convert back to original scale
+            self._scale_factor = float(res.scale)
 
             # Check convergence
             converged_attr = getattr(res, "converged", None)
@@ -132,19 +136,23 @@ class GarchTFitter:
         if persistence < 0.01:
             # Degenerate GARCH: fall back to i.i.d. Student-t with empirical volatility
             # Use omega as the variance estimate (since α+β ≈ 0 means σ² ≈ ω)
-            sigma = float(np.sqrt(max(omega, 1e-8)))
+            sigma_rescaled = float(np.sqrt(max(omega, 1e-8)))
         elif persistence >= 1.0:
             # Non-stationary: no unconditional variance exists
             # Use bounded approximation to avoid explosion
-            sigma = float(np.sqrt(omega / 0.01))  # Cap persistence at 0.99
+            sigma_rescaled = float(np.sqrt(omega / 0.01))  # Cap persistence at 0.99
         else:
             # Standard unconditional variance formula: σ² = ω / (1 - α - β)
+            # Note: omega, alpha, beta are in rescaled space
             denom = 1.0 - persistence
-            sigma = float(np.sqrt(omega / denom))
+            sigma_rescaled = float(np.sqrt(omega / denom))
+
+        # Convert back to original scale
+        sigma_original = sigma_rescaled * self._scale_factor
 
         # Generate i.i.d. Student-t samples with unconditional volatility
         rng = np.random.default_rng(seed)
-        return rng.standard_t(df=nu, size=(n_paths, n_steps)) * sigma
+        return rng.standard_t(df=nu, size=(n_paths, n_steps)) * sigma_original
 
     def log_likelihood(self) -> float:
         raise DistributionFitError("GARCH-T log-likelihood not available (not implemented)")
