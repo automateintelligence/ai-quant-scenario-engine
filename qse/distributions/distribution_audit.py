@@ -331,7 +331,7 @@ def run_var_backtests(
     Perform VaR backtests on an out-of-sample segment using each model.
 
     TODO [T150-T155, AS4 - scheduled]:
-    - Call ``backtesting.var_predictor`` to generate rolling one-step VaR forecasts instead of
+    - Call ``qse.var_predictor`` to generate rolling one-step VaR forecasts instead of
       sampling static returns from ``fitter.sample``.
     - Replace placeholder p-values with the actual Kupiec (LR_uc) and Christoffersen (LR_ind) tests
       defined under ``distributions.backtesting`` modules and persist their statistics in ``VarBacktestResult``.

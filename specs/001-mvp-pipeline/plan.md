@@ -6,7 +6,7 @@
 **Parents/Children**: Follows constitution; parent is spec.md, siblings include research.md, data-model.md, quickstart.md, contracts/, tasks.md.
 
 ## Summary
-Build a CPU-only Quant Scenario Engine that loads Parquet OHLCV, fits heavy-tailed return models (Laplace default; Student-T/GARCH-T options), generates Monte Carlo paths, runs stock and option strategies, and emits reproducible artifacts. Support CLI commands `compare`, `grid`, `screen`, `conditional`, and `replay`, with deterministic seeding, resource-aware storage policy, and candidate-based backtesting/MC per spec FR-001..FR-040 and FR-CAND-001..006.
+Build a CPU-only Quant Scenario Engine that loads Parquet OHLCV, fits heavy-tailed return models (Laplace default; Student-T/GARCH-T options), generates Monte Carlo paths, runs stock and option strategies, and emits reproducible artifacts. Support CLI commands `compare`, `grid`, `screen`, `conditional`, and `replay`, with deterministic seeding, resource-aware storage policy, and candidate-based qse/MC per spec FR-001..FR-040 and FR-CAND-001..006.
 
 ## Technical Context & Constraints
 - **Runtime**: Python 3.11 on 8 vCPU / 24 GB RAM VPS; CPU-only.

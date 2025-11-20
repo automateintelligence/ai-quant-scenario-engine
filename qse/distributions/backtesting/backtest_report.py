@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from qse.distributions.backtesting.christoffersen_test import christoffersen_pvalue
-from qse.distributions.backtesting.kupiec_test import kupiec_pvalue
-from qse.distributions.backtesting.breach_counter import count_breaches
-from qse.distributions.backtesting.var_predictor import predict_var_from_samples
+from qse.distributions.qse.christoffersen_test import christoffersen_pvalue
+from qse.distributions.qse.kupiec_test import kupiec_pvalue
+from qse.distributions.qse.breach_counter import count_breaches
+from qse.distributions.qse.var_predictor import predict_var_from_samples
 
 
 def run_var_backtest(returns_test, model_samples, levels: Sequence[float]):

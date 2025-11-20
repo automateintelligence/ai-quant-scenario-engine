@@ -1,4 +1,4 @@
-"""Conditional episode filtering and backtesting."""
+"""Conditional episode filtering and qse."""
 
 from __future__ import annotations
 

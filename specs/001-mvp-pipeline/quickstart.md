@@ -9,12 +9,12 @@ Parent: `plan.md` (derived from `spec.md` per constitution). References: `resear
 - First-run build notes: ensure Python dev headers (`python3-dev`) and build tools (`build-essential`) are installed so `numba/arch` compile cleanly.
 
 2) **Data prep & Parquet partitioning**
-- Generate partitions: `python -m quant-scenario-engine.cli.fetch --symbol AAPL --start 2018-01-01 --end 2024-12-31 --interval 1d --target data/`
+- Generate partitions: `python -m qse.cli.fetch --symbol AAPL --start 2018-01-01 --end 2024-12-31 --interval 1d --target data/`
 - Layout: `data/historical/interval=1d/symbol=AAPL/_v1/*.parquet` (version suffix increments when source changes).
 - Feature files live separately under `data/features/interval=1d/symbol=AAPL/`.
 
 3) **Run baseline stock vs option MC comparison**
-- `python -m quant-scenario-engine.cli.compare --symbol AAPL --paths 1000 --steps 60 --distribution laplace --strategy stock_basic --option-strategy call_basic --iv 0.25 --seed 42`
+- `python -m qse.cli.compare --symbol AAPL --paths 1000 --steps 60 --distribution laplace --strategy stock_basic --option-strategy call_basic --iv 0.25 --seed 42`
 - Outputs (per run_id):
   - `runs/<run_id>/metrics.json` and `metrics.csv`
   - `runs/<run_id>/run_meta.json`
@@ -49,15 +49,15 @@ Parent: `plan.md` (derived from `spec.md` per constitution). References: `resear
           risk_free_rate: 0.05
           contracts: 1
   ```
-- Run: `python -m quant-scenario-engine.cli.grid --config configs/grid_aapl.yaml`
+- Run: `python -m qse.cli.grid --config configs/grid_aapl.yaml`
 
-5) **Candidate screening + conditional backtesting/MC**
-- `python -m quant-scenario-engine.cli.screen --universe configs/universe.yaml --selector configs/selector_gap.yaml --lookback 5y --top 20`
-- `python -m quant-scenario-engine.cli.conditional --symbol AAPL --selector configs/selector_gap.yaml --paths 1000 --steps 60 --seed 99`
+5) **Candidate screening + conditional qse/MC**
+- `python -m qse.cli.screen --universe configs/universe.yaml --selector configs/selector_gap.yaml --lookback 5y --top 20`
+- `python -m qse.cli.conditional --symbol AAPL --selector configs/selector_gap.yaml --paths 1000 --steps 60 --seed 99`
 - Screening outputs `runs/<run_id>/candidates.json`; conditional run backtests only on those episodes and reports stock vs option metrics.
 
 6) **Replay a run**
-- `python -m quant-scenario-engine.cli.compare --replay runs/<run_id>/run_meta.json`
+- `python -m qse.cli.compare --replay runs/<run_id>/run_meta.json`
 - Refuses replay when data version changed unless `--force-replay`; drift status recorded in output.
 
 7) **Resource safeguards**
@@ -67,7 +67,7 @@ Parent: `plan.md` (derived from `spec.md` per constitution). References: `resear
 
 8) **Package assumptions**
 - Commands assume `quant-scenario-engine` import path is installed (editable): `pip install -e .`.
-- CLI names map to Typer entrypoints under `quant-scenario-engine/cli`.
+- CLI names map to Typer entrypoints under `qse/cli`.
 
 9) **Common pitfalls**
 - Missing build deps for `numba`/`arch`: install `python3-dev`, `build-essential`, `libopenblas-dev`.
@@ -81,5 +81,5 @@ Parent: `plan.md` (derived from `spec.md` per constitution). References: `resear
     && source .venv/bin/activate \
     && pip install -U pip \
     && pip install -r requirements-dev.txt \
-    && python -m quant-scenario-engine.cli.fetch --symbol AAPL --start 2018-01-01 --end 2024-12-31 --interval 1d --target data/
+    && python -m qse.cli.fetch --symbol AAPL --start 2018-01-01 --end 2024-12-31 --interval 1d --target data/
   ```

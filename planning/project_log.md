@@ -561,9 +561,9 @@ You **don’t** need to bolt on a full backtesting framework to build the MVP, b
     ```
   * Great for sanity checking your Monte Carlo results and giving you “PyFolio-style” tear sheets.
 
-* **Backtesting.py (optional)**
+* **qse.py (optional)**
 
-  * If you want to sanity check your strategy logic on **historical data only** (no Monte Carlo) with minimal code, Backtesting.py is useful.
+  * If you want to sanity check your strategy logic on **historical data only** (no Monte Carlo) with minimal code, qse.py is useful.
   * But for the **simulated paths**, your own engine is simpler.
 
 * **vectorbt (later)**
@@ -705,14 +705,14 @@ LLM / external analysis (later):
 Assume a Python package structure like:
 
 ```text
-quant-scenario-engine/
+qse/
 ├── data/                   # data source adapters (yfinance, Schwab API, PyData loaders)
 ├── features/               # indicator + macro enrichment
 ├── schema/
 ├── models/
 ├── interfaces/
 ├── runs/
-├── backtesting/
+├── qse/
 |   ├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
 |   └── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
 ├── optimizer/
@@ -736,7 +736,7 @@ Below, I’ll outline key classes, methods, and signatures.
 ### 4.1 Data sources
 
 ```python
-# quant-scenario-engine/data/data_source.py
+# qse/data/data_source.py
 from abc import ABC, abstractmethod
 import pandas as pd
 from datetime import datetime
@@ -774,7 +774,7 @@ class DataSource(ABC):
 Concrete implementations:
 
 ```python
-# quant-scenario-engine/data/schwab_source.py
+# qse/data/schwab_source.py
 class SchwabDataSource(DataSource):
     def __init__(self, api_client):
         self.api_client = api_client
@@ -784,7 +784,7 @@ class SchwabDataSource(DataSource):
 ```
 
 ```python
-# quant-scenario-engine/data/yfinance_source.py
+# qse/data/yfinance_source.py
 import yfinance as yf
 
 class YFinanceDataSource(DataSource):
@@ -799,7 +799,7 @@ You can set a **config** that chooses which data source to use (Schwab vs yfinan
 Use `pandas-ta` or `ta` to avoid re-inventing indicators:
 
 ```python
-# quant-scenario-engine/data/feature_engineering.py
+# qse/data/feature_engineering.py
 import pandas as pd
 import pandas_ta as ta
 
@@ -832,7 +832,7 @@ def add_technical_indicators(
 You’re correct: you can either go event-driven or align to your main bar frequency.
 
 ```python
-# quant-scenario-engine/models/macro_factors.py
+# qse/models/macro_factors.py
 import pandas as pd
 
 def align_macro_to_prices(
@@ -863,7 +863,7 @@ Later, you can build a small **event abstraction** if you want, but for now, ali
 Use SciPy and ARCH to fit distributions and optionally GARCH / stochastic volatility models.
 
 ```python
-# quant-scenario-engine/models/distributions.py
+# qse/models/distributions.py
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy import stats
@@ -917,7 +917,7 @@ You can select which class to use via config.
 ### 5.2 Path generator
 
 ```python
-# quant-scenario-engine/models/path_generator.py
+# qse/models/path_generator.py
 import numpy as np
 
 def generate_price_paths(
@@ -947,7 +947,7 @@ Approach:
 For your CPU-only MVP, use BS with **per-strike IV** as a strong baseline. That already fixes the biggest Black–Scholes sin (constant vol). Later you can plug in Heston via QuantLib if needed.
 
 ```python
-# quant-scenario-engine/models/option_pricing.py
+# qse/models/option_pricing.py
 from abc import ABC, abstractmethod
 import numpy as np
 from dataclasses import dataclass
@@ -1003,7 +1003,7 @@ For **this application** (short-horizon, high-vol single names; MC paths you alr
 ### 6.1 Strategy interface
 
 ```python
-# quant-scenario-engine/strategy/base.py
+# qse/strategy/base.py
 from abc import ABC, abstractmethod
 import numpy as np
 import pandas as pd
@@ -1040,7 +1040,7 @@ For Monte Carlo, you can generalize to `(n_paths, n_steps)` by broadcasting the 
 Example simple strategy class:
 
 ```python
-# quant-scenario-engine/strategy/stock_strategies.py
+# qse/strategy/stock_strategies.py
 class MeanReversionStockStrategy(Strategy):
     def generate_signals(self, prices, features, params):
         close = prices["close"].values
@@ -1057,7 +1057,7 @@ class MeanReversionStockStrategy(Strategy):
 Option counterpart:
 
 ```python
-# quant-scenario-engine/strategy/option_strategies.py
+# qse/strategy/option_strategies.py
 from quant_sys.models.option_pricing import OptionSpec
 
 class CallOverlayStrategy(Strategy):
@@ -1215,7 +1215,7 @@ def generate_tearsheet(
 ## 7. Optimization Layer
 
 ```python
-# quant-scenario-engine/optimizer/optimizer.py
+# qse/optimizer/optimizer.py
 from typing import Dict, Any, Callable, List
 import itertools
 import numpy as np
@@ -1346,7 +1346,7 @@ I’ll assume a package name `quant_sys`.
 ## 1. Directory layout
 
 ```text
-quant-scenario-engine/
+qse/
   __init__.py
 
   config/
@@ -1373,7 +1373,7 @@ quant-scenario-engine/
     stock_strategies.py
     option_strategies.py
 
-  backtesting/
+  qse/
     __init__.py
     simulator.py
     metrics.py
@@ -1394,7 +1394,7 @@ You can adapt names, but this is concrete enough to start.
 ## 2. `config/settings.py`
 
 ```python
-# quant-scenario-engine/config/settings.py
+# qse/config/settings.py
 
 from dataclasses import dataclass
 
@@ -1430,7 +1430,7 @@ settings = Settings()
 ### 3.1 `data/data_source.py`
 
 ```python
-# quant-scenario-engine/data/data_source.py
+# qse/data/data_source.py
 
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -1471,7 +1471,7 @@ class DataSource(ABC):
 ### 3.2 `data/yfinance_source.py`
 
 ```python
-# quant-scenario-engine/data/yfinance_source.py
+# qse/data/yfinance_source.py
 
 from datetime import datetime
 import pandas as pd
@@ -1521,7 +1521,7 @@ class YFinanceDataSource(DataSource):
 ### 3.3 `data/schwab_source.py` (stub)
 
 ```python
-# quant-scenario-engine/data/schwab_source.py
+# qse/data/schwab_source.py
 
 from datetime import datetime
 import pandas as pd
@@ -1558,7 +1558,7 @@ class SchwabDataSource(DataSource):
 ### 3.4 `data/feature_engineering.py`
 
 ```python
-# quant-scenario-engine/data/feature_engineering.py
+# qse/data/feature_engineering.py
 
 import pandas as pd
 import pandas_ta as ta
@@ -1598,7 +1598,7 @@ def add_technical_indicators(
 ### 4.1 `models/macro_factors.py`
 
 ```python
-# quant-scenario-engine/models/macro_factors.py
+# qse/models/macro_factors.py
 
 import pandas as pd
 
@@ -1628,7 +1628,7 @@ def align_macro_to_prices(
 ### 4.2 `models/distributions.py`
 
 ```python
-# quant-scenario-engine/models/distributions.py
+# qse/models/distributions.py
 
 from abc import ABC, abstractmethod
 import numpy as np
@@ -1681,7 +1681,7 @@ class GARCHStudentTDistribution(ReturnDistribution):
 ### 4.3 `models/path_generator.py`
 
 ```python
-# quant-scenario-engine/models/path_generator.py
+# qse/models/path_generator.py
 
 import numpy as np
 from .distributions import ReturnDistribution
@@ -1704,7 +1704,7 @@ def generate_price_paths(
 ### 4.4 `models/option_pricing.py`
 
 ```python
-# quant-scenario-engine/models/option_pricing.py
+# qse/models/option_pricing.py
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -1769,7 +1769,7 @@ class BlackScholesPricer(OptionPricer):
 ### 5.1 `strategy/base.py`
 
 ```python
-# quant-scenario-engine/strategy/base.py
+# qse/strategy/base.py
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -1803,7 +1803,7 @@ class Strategy(ABC):
 ### 5.2 `strategy/stock_strategies.py`
 
 ```python
-# quant-scenario-engine/strategy/stock_strategies.py
+# qse/strategy/stock_strategies.py
 
 from typing import Dict, Any
 import numpy as np
@@ -1837,7 +1837,7 @@ class MeanReversionStockStrategy(Strategy):
 ### 5.3 `strategy/option_strategies.py`
 
 ```python
-# quant-scenario-engine/strategy/option_strategies.py
+# qse/strategy/option_strategies.py
 
 from typing import Dict, Any
 import numpy as np
@@ -2002,7 +2002,7 @@ def generate_tearsheet(
 ## 7. Optimization (stub)
 
 ```python
-# quant-scenario-engine/optimizer/optimizer.py
+# qse/optimizer/optimizer.py
 
 from typing import Dict, Any, Callable, List
 import itertools
@@ -2034,7 +2034,7 @@ def grid_search(
 This is the “end-to-end” script: load data, compute features, fit distribution, generate paths, run two strategies, simulate, compare.
 
 ```python
-# quant-scenario-engine/cli/main.py
+# qse/cli/main.py
 
 import argparse
 from datetime import datetime
@@ -2052,8 +2052,8 @@ from quant_sys.models.path_generator import generate_price_paths
 from quant_sys.models.option_pricing import BlackScholesPricer
 from quant_sys.strategy.stock_strategies import MeanReversionStockStrategy
 from quant_sys.strategy.option_strategies import MeanReversionCallStrategy
-from quant_sys.backtesting.simulator import MarketSimulator
-from quant_sys.backtesting.metrics import summarize_equity_curve
+from quant_sys.qse.simulator import MarketSimulator
+from quant_sys.qse.metrics import summarize_equity_curve
 
 def get_distribution_model(name: str):
     if name == "normal":
@@ -2643,3 +2643,5 @@ If what you need is “use the audit machinery but don’t trust the existing ca
 
 python -m qse.cli audit-distributions --symbol AAPL --force-refit
 python -m qse.cli compare --symbol AAPL --use-audit  # picks up fresh cache temporarily run compare with --no-use-audit until the code changes settle.
+
+/speckit.implement "Implement incomplete tasks for Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. For any development in distribution_audit.py, if there are 'TODO' items linked to tasks, be sure to mark them as completed.  Be sure to mark completed tasks in tasks.md."

@@ -1,4 +1,4 @@
-Below are **canonical, widely-used stock and option strategies** that are simple, rule-driven, well-understood in the literature, and suitable for an MVP backtesting/Monte-Carlo system.
+Below are **canonical, widely-used stock and option strategies** that are simple, rule-driven, well-understood in the literature, and suitable for an MVP qse/Monte-Carlo system.
 
 They require NO proprietary datasets and translate cleanly into your architecture.
 

@@ -47,14 +47,14 @@ specs/001-mvp-pipeline/
 ### Source Code (repository root)
 
 ```text
-quant-scenario-engine/
+qse/
 ├── data/                   # data source adapters (yfinance, Schwab API, PyData loaders)
 ├── features/               # indicator + macro enrichment
 ├── schema/
 ├── models/
 ├── interfaces/
 ├── runs/
-├── backtesting/
+├── qse/
 |   ├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
 |   └── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
 ├── optimizer/
@@ -70,7 +70,7 @@ quant-scenario-engine/
     └── contract/           # CLI/config/schema/contracts
 ```
 
-**Structure Decision**: Single-package layout rooted in `quant-scenario-engine/`; keeps CLI + engine co-located for fast iteration while preserving clear submodules for data, backtesting, MC, pricers, strategies, and simulations.
+**Structure Decision**: Single-package layout rooted in `qse/`; keeps CLI + engine co-located for fast iteration while preserving clear submodules for data, backtesting, MC, pricers, strategies, and simulations.
 
 ## Complexity Tracking
 
@@ -89,13 +89,13 @@ quant-scenario-engine/
 
 ## Interfaces & Public Functions (per module)
 
-- `backtesting.data`: `load_ohlcv(symbol, start, end, interval) -> DataFrame` with automatic on-demand fetching and local caching; adapters `YFinanceSource`, `SchwabStub` chosen via config. Implements cache-aside pattern: check local Parquet → fetch on miss/stale → validate → write cache → return data.
-- `backtesting.distributions`: `ReturnDistribution.fit(returns)`, `.sample(n_paths, n_steps, seed)`, models: Laplace (default), Student-T, optional GARCH-T flag (FR-002).
-- `backtesting.mc`: `generate_paths(dist, n_paths, n_steps, s0, seed, storage_policy)` with memmap/npz fallback (FR-013/DM-011).
-- `backtesting.pricing`: `OptionPricer.price(path_slice, option_spec)`; `BlackScholesPricer` default; `PyVollibPricer` optional; adapter slot for QuantLib/Heston 'HestonPricer' later(FR-016).
-- `backtesting.strategies`: `Strategy.generate_signals(price_paths, features, params) -> StrategySignals` (stock + option signals + OptionSpec); param schemas validated against `StrategyParams`.
-- `backtesting.simulation`: `run_compare`, `run_grid`, `run_conditional_backtest`, `run_conditional_mc`, all producing `SimulationRun` + artifacts.
-- `quant-scenario-engine.cli`: Typer commands invoking above, enforcing config validation and run_meta persistence (FR-009, FR-019).
+- `qse.data`: `load_ohlcv(symbol, start, end, interval) -> DataFrame` with automatic on-demand fetching and local caching; adapters `YFinanceSource`, `SchwabStub` chosen via config. Implements cache-aside pattern: check local Parquet → fetch on miss/stale → validate → write cache → return data.
+- `qse.distributions`: `ReturnDistribution.fit(returns)`, `.sample(n_paths, n_steps, seed)`, models: Laplace (default), Student-T, optional GARCH-T flag (FR-002).
+- `qse.mc`: `generate_paths(dist, n_paths, n_steps, s0, seed, storage_policy)` with memmap/npz fallback (FR-013/DM-011).
+- `qse.pricing`: `OptionPricer.price(path_slice, option_spec)`; `BlackScholesPricer` default; `PyVollibPricer` optional; adapter slot for QuantLib/Heston 'HestonPricer' later(FR-016).
+- `qse.strategies`: `Strategy.generate_signals(price_paths, features, params) -> StrategySignals` (stock + option signals + OptionSpec); param schemas validated against `StrategyParams`.
+- `qse.simulation`: `run_compare`, `run_grid`, `run_conditional_backtest`, `run_conditional_mc`, all producing `SimulationRun` + artifacts.
+- `qse.cli`: Typer commands invoking above, enforcing config validation and run_meta persistence (FR-009, FR-019).
 
 ## Concurrency Model
 
