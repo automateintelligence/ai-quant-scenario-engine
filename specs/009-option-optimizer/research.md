@@ -2,75 +2,31 @@
 
 Parent: `plan.md` (per spec.md and constitution). Children: informs `data-model.md`, `contracts/`, `quickstart.md`.
 
-Each decision below links to the corresponding requirements and captures performance/operational implications. Rejection criteria are explicit for traceability.
+Each decision captures rationale and rejected alternatives for traceability.
 
 ## Decision Log
 
-1) **Option pricer backend for MVP and extension (FR-016)**  
-**Decision:** Use closed-form Black–Scholes (scipy/numpy) for European calls/puts with fixed IV; define `OptionPricer` interface and ship optional `py_vollib` adapter; reserve QuantLib/Heston for a later adapter behind the same interface.  
-**Rationale:** BS analytic keeps CPU-only VPS fast and avoids heavy builds; interface prevents lock-in and satisfies FR-016 configurability.  
-**Alternatives considered:** QuantLib/Heston now (heavy compile, slows onboarding); custom Heston (complex, low ROI for MVP); BS-only without interface (blocks swap-ability).  
-**Performance note:** BS pricing is O(n_steps); negligible vs MC generation. `py_vollib` adds minor overhead but stays CPU-friendly.
+1) **Regime-to-distribution mapping modes (FR-013..FR-016)**  
+**Decision:** Support three modes: `table` (config lookup of mean_daily_return, daily_vol, skew, kurtosis_excess), `calibrated` (bootstrap historical bars matching regime features), and `explicit` (CLI overrides). Multi-day horizons compound daily params stepwise.  
+**Rationale:** Table mode enables deterministic CLI runs; calibrated/explicit preserve expert overrides without changing code.  
+**Alternatives considered:** Single mode (table only) — rejected; blocks calibration and explicit expert inputs.
 
-2) **Return distribution fitting approach (FR-002, FR-013)**  
-**Decision:** Default Laplace fit via `scipy.stats.laplace`; enable Student-T via `scipy.stats.t`; optional GARCH-T via `arch` guarded by `use_garch` flag. Persist params + seeds in run_meta.  
-**Rationale:** Laplace covers fat tails with minimal tuning; Student-T adds heavier tails for stress; GARCH-T available but off-by-default to preserve ≤10s baseline.  
-**Alternatives considered:** Normal-only (insufficient tails), always-on GARCH (too slow for 1k×60), mixture models (complex, unjustified for MVP).  
-**Performance note:** Laplace/Student-T fit O(n); GARCH fit slower (warn user when enabled; document expected latency per symbol ≈ seconds).
+2) **Pricing stack and fallback (FR-017..FR-023)**  
+**Decision:** Default pricer Bjerksund-Stensland; automatic fallback to Black-Scholes on convergence error with warning; skip candidate if both fail; shared `OptionPricer` interface for US1/US9; IV evolution modes: constant, sticky-delta, custom callable.  
+**Rationale:** Matches acceptance scenarios, preserves run continuity, and keeps pricing consistent across products.  
+**Alternatives considered:** Halt on pricer failure (breaks run); BS-only (loses American exercise realism); ad-hoc IV handling (inconsistent).
 
-3) **Conditional candidate episode generation & conditional MC (FR-CAND-001..006)**  
-**Decision:** Deterministic `CandidateSelector` DSL (gap/volume/volatility rules) emitting candidate episodes. Conditional MC: non-parametric bootstrapping from matched episodes + optional parametric refit (Laplace/Student-T); fallback to unconditional MC when pool < N_min.  
-**Rationale:** Rule-based selectors are explainable and fast over ≥100 symbols; bootstrapping delivers scenario realism without heavy modeling; parametric refit keeps speed.  
-**Alternatives considered:** kNN/state-embedding ML (more complexity/slower), pure unconditional MC (ignores conditioning goal), copulas (overkill for MVP).  
-**Performance note:** Selector scan complexity O(symbols × bars); conditional bootstrap cost proportional to candidate pool size.
+3) **Candidate filtering and staging (FR-006..FR-012, FR-010)**  
+**Decision:** Stage 0 choose 3–5 expiries in [7,45] DTE; Stage 1 strikes filtered by regime moneyness band and liquidity (vol/OI/bid-ask%); Stage 2 generate verticals width 1–3, iron condors, straddles/strangles; Stage 3 analytic prefilter with hard constraints (capital ≤15k, MaxLoss/capital ≤5%, E[PnL]≥$500, POP≥60%, POP_target≥30%) and keep top K per structure (20–50); Stage 4 full MC scoring on 50–200 survivors.  
+**Rationale:** Bounded search space for <30s runtime while preserving structure variety.  
+**Alternatives considered:** Brute-force full MC on all candidates (too slow); heuristic single-stage filtering (risk of missing good trades).
 
-4) **Historical data sourcing & partitioning (FR-001, FR-017, DM-series)**  
-**Decision:** yfinance default loader; Schwab adapter stub with identical interface; Parquet partitioned by `symbol=` and `interval=` with source version suffixes when upstream changes.  
-```text
-# The yfinance API provides a wealth of stock information beyond just price data, accessible through attributes and methods of the Ticker object. These include: 
-## Historical Market Data
-When using the .history() method, the resulting pandas DataFrame includes these fields in addition to Open, High, Low, and Close price: 
-- Adjusted Close: The closing price after adjustments for corporate actions like dividends and stock splits.
-- Volume: The number of shares traded during the period.
-- Dividends: The dividend amount paid on a specific date.
-- Stock Splits: Information on stock splits that occurred. 
-## Company Fundamentals and Information
-The .info attribute returns a dictionary containing a wide range of metadata and financial metrics, including: 
-- Company Information: Name, sector, industry, and a summary description.
-- Key Metrics: Market cap, P/E ratios, earnings per share (EPS), and revenue.
-- Dates: Earnings dates and ex-dividend dates.
-- Valuation Data: Various financial ratios and statistics.
-- Employee Count. 
-## Financial Statements
-Methods are available to access detailed financial reports as pandas DataFrames: 
-- .income_stmt / .quarterly_income_stmt: Income statements.
-- .balance_sheet / .quarterly_balance_sheet: Balance sheets.
-- .cashflow / .quarterly_cashflow: Cash flow statements. 
-## Other Data Types
-- Corporate Actions: .actions provides a history of dividends and stock splits.
-- Options Data: .option_chain() allows access to specific options contracts, including strike prices, bid/ask, volume, open interest, and implied volatility.
-- Analyst Recommendations: .analyst_price_targets provides data on what analysts are recommending for the stock.
-- Sustainability Scores: .sustainability provides environmental, social, and governance (ESG) data.
-- Institutional/Insider Holdings: Information on major shareholders and insider transactions.
-- News: Access to related market news articles. 
-REF: https://ranaroussi.github.io/yfinance/reference/index.html
-```
-**Rationale:** Fast to prototype; stable contract for future Schwab integration; partitioning accelerates slicing and supports DNFR storage expectations.  
-**Alternatives considered:** CSV-only (slow, weak schema), Schwab-first (blocked by credential testing; slows MVP), centralized DB (unneeded for single-user VPS).  
-**Performance note:** Parquet IO faster than CSV; partition pruning limits memory.
+4) **Transaction costs and net-P&L handling (FR-042..FR-047)**  
+**Decision:** Pay-the-spread fills (short legs at bid, long at ask) plus $0.65/contract commission; include expected exit spread in E[PnL]; apply all filters/scoring on net P&L after costs; allow `--commission 0` override for testing with spread costs retained unless also overridden.  
+**Rationale:** Aligns with acceptance scenarios; prevents optimistic profitability.  
+**Alternatives considered:** Mid-price fills (unrealistic); ignoring exit costs (overstates PnL).
 
-5) **Monte Carlo performance & storage policy (FR-013, FR-018, DM-008..DM-014)**  
-**Decision:** In-memory MC when estimated footprint <25% RAM; chunked + `numpy.memmap` when ≥25%; persist `.npz` only for reuse/replay. Use vectorized NumPy + optional `numba` JIT; cap workers to ≤6 on 8 vCPU.  
-**Rationale:** Prevents OOM, meets runtime/throughput goals, aligns with DM-series. Worker cap matches FR-018 limits.  
-**Alternatives considered:** Always persist MC (disk-heavy), Dask/Ray (overhead for MVP), GPU (not available on VPS).
-
-## MVP Defaults vs Advanced Toggles
-
-| Area | Default (MVP) | Advanced toggle |
-|------|----------------|-----------------|
-| Distribution | Laplace | Student-T; GARCH-T via `use_garch` flag |
-| Option pricer | Black–Scholes | `py_vollib`; QuantLib/Heston adapter later |
-| Data source | yfinance | Schwab adapter promoted via config |
-| MC storage | In-memory <25% RAM | memmap/npz when over threshold or replay requested |
-| Selector | Built-in gap/volume rule | Custom DSL configs |
-| Workers | max_workers=6 | Lower/raise via config within FR-018 guardrails |
+5) **Output footprint and diagnostics (FR-048..FR-055, FR-075)**  
+**Decision:** Return Top-10 to primary output; cache Top-100 with broker-ready JSON orders; include leg-by-leg breakdown, full metrics, score decomposition, and diagnostic summaries when empty or when pricer/MC fallbacks occur; always report 95% CIs for E[PnL]/POP; adaptive paths to max 20k when CI width exceeds threshold.  
+**Rationale:** Meets success criteria for transparency and uncertainty quantification without exceeding runtime budgets.  
+**Alternatives considered:** Point estimates only (too opaque); full-candidate dump (noisy, slower for users).

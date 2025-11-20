@@ -2726,3 +2726,45 @@ questions from the brainstorming session have been incorporated, and the archite
 is designed to integrate seamlessly with existing US1 infrastructure.
 
 Replaced US9 with feature branch name, because sped.md has multiple user stories.):planning/project_log_009.md
+
+Git Workflow - Feature Branch Development
+
+  Daily Work Pattern
+
+  # Make changes, test, commit
+  git add <files>
+  git commit -m "descriptive message"
+  git push github 009-option-optimizer
+
+  When Main Updates (Weekly or Before PR)
+
+  # Get latest main
+  git fetch github
+
+  # Rebase your branch onto latest main
+  git rebase github/main
+
+  # If conflicts → resolve → git add → git rebase --continue
+  # When done:
+  git push github 009-option-optimizer --force-with-lease
+
+  When Feature Is Done
+
+  # Final sync with main
+  git fetch github
+  git rebase github/main
+  git push github 009-option-optimizer --force-with-lease
+
+  # Create PR on GitHub: 009-option-optimizer → main
+  # After PR approved and merged, delete local branch
+
+  ---
+  Key Rules
+
+  1. Normal commits: Regular git push (no force needed)
+  2. After rebase: git push --force-with-lease (rewrote history)
+  3. Sync frequency: Before starting new work or before creating PR
+  4. Never force push to main: Only force push to YOUR feature branches
+
+  That's it! Continue normal development with regular commits/pushes. Only rebase when
+  you need to sync with main.

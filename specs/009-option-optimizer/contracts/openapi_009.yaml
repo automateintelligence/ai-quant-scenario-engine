@@ -1,0 +1,217 @@
+openapi: 3.1.0
+info:
+  title: Option Strategy Optimizer (009) Logical Contracts
+  version: 0.1.0
+  description: Logical API contracts mirroring CLI commands (`optimize-strategy`, `monitor`). Used for contract tests even though transport is CLI.
+paths:
+  /optimize-strategy:
+    post:
+      summary: Optimize option strategies for a ticker/regime
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OptimizeRequest'
+      responses:
+        '200':
+          description: Ranked strategies produced
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OptimizeResponse'
+  /monitor:
+    post:
+      summary: Monitor an open position with periodic repricing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorRequest'
+      responses:
+        '200':
+          description: Monitoring status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitorResponse'
+components:
+  schemas:
+    OptimizeRequest:
+      type: object
+      required: [ticker, regime, trade_horizon]
+      properties:
+        ticker:
+          type: string
+        regime:
+          type: string
+          enum: [neutral, strong-neutral, low-volatility, volatility-dir-uncertain, mild-bearish, strong-bearish, mild-bullish, strong-bullish]
+        trade_horizon:
+          type: integer
+          minimum: 1
+          description: Holding period in days
+        config_path:
+          type: string
+          description: Path to config.yml
+        overrides:
+          type: array
+          items:
+            type: string
+          description: CLI-style overrides `path.to.param=value`
+        pricing_model:
+          type: string
+          enum: [bjerksund_stensland, black_scholes, heston]
+        mc:
+          type: object
+          properties:
+            num_paths:
+              type: integer
+            max_paths:
+              type: integer
+            adaptive:
+              type: boolean
+        filters:
+          type: object
+          properties:
+            max_capital:
+              type: number
+            max_loss_pct:
+              type: number
+            min_epnl:
+              type: number
+            min_pop_breakeven:
+              type: number
+            min_pop_target:
+              type: number
+        scoring:
+          type: object
+          properties:
+            scorer:
+              type: string
+            weights:
+              type: object
+    OptimizeResponse:
+      type: object
+      required: [top_10, diagnostics]
+      properties:
+        top_10:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trade'
+        top_100_cache_path:
+          type: string
+        diagnostics:
+          $ref: '#/components/schemas/Diagnostics'
+        runtime_seconds:
+          type: number
+    Trade:
+      type: object
+      properties:
+        structure_type:
+          type: string
+        legs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Leg'
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        score:
+          type: number
+        score_decomposition:
+          type: object
+        order_json:
+          type: object
+    Leg:
+      type: object
+      required: [side, option_type, strike, expiry, quantity]
+      properties:
+        side:
+          type: string
+          enum: [long, short]
+        option_type:
+          type: string
+          enum: [call, put]
+        strike:
+          type: number
+        expiry:
+          type: string
+        quantity:
+          type: integer
+        fill_price:
+          type: number
+        bid:
+          type: number
+        ask:
+          type: number
+    Metrics:
+      type: object
+      properties:
+        E_PnL:
+          type: number
+        CI_epnl:
+          type: array
+          items:
+            type: number
+        POP_0:
+          type: number
+        POP_target:
+          type: number
+        ROC:
+          type: number
+        MaxLoss_trade:
+          type: number
+        VaR_5:
+          type: number
+        CVaR_5:
+          type: number
+        Delta:
+          type: number
+        Theta:
+          type: number
+        Gamma:
+          type: number
+        Vega:
+          type: number
+        path_count:
+          type: integer
+    Diagnostics:
+      type: object
+      properties:
+        stage_counts:
+          type: object
+        rejection_breakdown:
+          type: object
+        pricer_warnings:
+          type: array
+          items:
+            type: string
+        adaptive_paths:
+          type: object
+        hints:
+          type: array
+          items:
+            type: string
+    MonitorRequest:
+      type: object
+      required: [position_file]
+      properties:
+        position_file:
+          type: string
+        interval_seconds:
+          type: integer
+        alert_config:
+          type: object
+    MonitorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        last_metrics:
+          $ref: '#/components/schemas/Metrics'
+        alerts_triggered:
+          type: array
+          items:
+            type: string
+        next_run_eta_seconds:
+          type: integer

@@ -1,170 +1,57 @@
 # Data Model
 
-Parent: `plan.md` (under `spec.md` per constitution). Children: contracts consume schemas; quickstart/CLI examples rely on these entities.
+Parent: `plan.md` (spec-driven). Used by contracts and quickstart examples.
 
-## Relationships Overview
-- `DataSource` → `ReturnDistribution` → `PricePath` → `StrategySignals` → `SimulationRun` → `MetricsReport`.
-- `CandidateSelector` → `CandidateEpisode` feeds both conditional backtests and conditional Monte Carlo sampling.
-- `RunConfig` ties all components together and is persisted for replay.
+## Core Entities
 
-## Core Interfaces
-- **Strategy**: `generate_signals(price_paths: np.ndarray, features: DataFrame|dict, params: StrategyParams) -> StrategySignals` (must emit both stock and option signals plus OptionSpec when option legs are used).
-- **StrategySignals**: `{signals_stock: np.ndarray[int8][n_paths,n_steps], signals_option: np.ndarray[int8][n_paths,n_steps], option_spec: OptionSpec|null, features_used: list[str]}`.
-- **OptionPricer**: `price(path_slice: np.ndarray[n_steps], option_spec: OptionSpec) -> np.ndarray[n_steps]` for mark-to-market; supports payoff-only mode for expiry pricing. Implementations: `BlackScholesPricer` (default), `PyVollibPricer` optional, QuantLib/Heston adapter later.
-- **ReturnDistribution**: `fit(returns: np.ndarray, min_samples: int=60) -> params` and `sample(n_paths, n_steps, seed) -> np.ndarray[float64][n_paths,n_steps]` with model choices Laplace (default), Student-T, optional GARCH-T.
-- **StoragePolicy**: decide `memory` vs `npz` vs `memmap` based on estimated footprint and reuse flag.
+### Regime
+- **Fields**: `label` (enum: neutral, strong-neutral, low-volatility, volatility-dir-uncertain, mild-bearish, strong-bearish, mild-bullish, strong-bullish), `mode` (table|calibrated|explicit), `mean_daily_return` (float), `daily_vol` (float), `skew` (float), `kurtosis_excess` (float), `source` (config|calibrated|override).
+- **Validation**: Unknown labels error; explicit overrides take precedence; multi-day horizons compound daily params.
 
-## Entities
+### DistributionEngine
+- **Interface**: `generate_paths(s0, trade_horizon, bars_per_day, regime_params, seed) -> np.ndarray[n_paths, n_steps]`.
+- **Implementations**: garch_t, student_t, laplacian, bootstrap (regime-conditioned), ml_conditional (future).
+- **Validation**: Seeds required for reproducibility; cap `n_paths` to `max_paths` (default 20k); record variance stats for CI.
 
-### DataSource
-- **Fields**: `name` (enum: yfinance, schwab_stub), `symbols` (list[str]), `start` (date), `end` (date), `interval` (enum: 1d, 5m, 1m), `source_version` (str), `path` (abs path to Parquet partition).
-- **Defaults**: `name=yfinance`, `interval=1d`.
-- **Validation**: Must provide OHLCV columns; interval must match requested frequency; warn/drop symbols with insufficient coverage; Parquet partitioning ensures schema consistency.
-- **Relationships**: Supplies data for `ReturnDistribution` and `CandidateSelector`.
+### OptionPricer
+- **Interface**: `price_option(underlying, strike, maturity, rate, dividend, iv_state, type)`; `greeks(...)`.
+- **Implementations**: bjerksund_stensland (default), black_scholes (fallback), heston (advanced), slv/svi (future).
+- **Validation**: On failure fallback to BS; if BS fails skip candidate and log diagnostics (FR-021/FR-022); supports IV modes constant|sticky-delta|custom fn.
 
-### ReturnDistribution
-- **Fields**: `model` (enum: laplace [default], student_t, garch_t), `params` (dict), `fit_window` (int bars), `seed` (int), `estimator` (enum: mle, gmm), `loglik` (float), `aic`/`bic` (float), `fit_status` (enum: success, warn, fail), `min_samples` (int ≥60).
-- **Validation**: Parameter dict must match model; `len(returns) >= min_samples`; stationarity/AR preflight must pass or transform; implausible-parameter thresholds enforced per model; convergence limits enforced; seed required for reproducibility; failure triggers `DistributionFitError` and fallback model.
-- **Relationships**: Generates `PricePath` samples; params + seed + estimator metadata written to run_meta.
+### IVSurface
+- **Fields**: grid of `(log_moneyness, tau, iv)`; interpolation method bilinear; metadata `as_of`, `source`.
+- **Validation**: Must have ≥2 strikes × 2 expiries; missing IV points skipped with warning; provide `iv_at(S,K,T)`.
 
-```python
-# interfaces/distribution.py
+### CandidateStructure
+- **Fields**: `structure_type` (vertical, iron_condor, straddle, strangle, butterfly future), `legs[]` (side, type, strike, expiry, qty, fill_price_source), `capital_used`, `max_loss`, `expiry`, `width`, `liquidity_ok` (bool), `filters_passed` (list).
+- **Validation**: Generated only from Stage 0-2 filtered strikes/expiries; enforce width limits; ensure leg expiries consistent.
 
-from abc import ABC, abstractmethod
-import numpy as np
+### Metrics
+- **Fields**: `E_PnL`, `CI_epnl`, `POP_0`, `POP_target`, `ROC`, `MaxLoss_trade`, `VaR_5`, `CVaR_5`, `Delta`, `Theta`, `Gamma`, `Vega`, `score`, `score_decomposition`, `path_count`, `variance_flags`.
+- **Validation**: CI requires sample variance; POP_target default profit_target=$500; score uses config weights; path_count recorded for adaptive steps.
 
-class ReturnDistribution(ABC):
-    """Base class for all unconditional or state-conditioned return models."""
+### StrategyScorer
+- **Interface**: `score(candidate, metrics, config) -> float`.
+- **Implementations**: intraday-spreads (default), directional-bullish/bearish (future), volatility-play, gamma-scalping; plugin loader discovers scorers in `scorers/`.
+- **Validation**: Weights loaded from config; normalization documented; plugins must register name and version.
 
-    @abstractmethod
-    def fit(self, returns: np.ndarray) -> None:
-        """Fit parameters from 1D array of log returns."""
+### Position (for monitoring)
+- **Fields**: `legs[]` (strike, type, side, qty, entry_price), `entry_time`, `trade_horizon`, `regime`, `config_snapshot`, `H_remaining`, `alerts` (profit_target, stop_loss), `last_mark_time`, `last_metrics`.
+- **Validation**: `H_remaining = max(1, trade_horizon - days_elapsed)`; config snapshot required for replay; alerts optional but validated if provided.
 
-    @abstractmethod
-    def sample(self, n_paths: int, n_steps: int) -> np.ndarray:
-        """
-        Produce log-return matrix of shape (n_paths, n_steps).
-        """
-```
+### RunArtifacts
+- **Fields**: `top_10` (list[CandidateStructure+Metrics]), `top_100_cache`, `diagnostics` (stage counts, rejection breakdown), `orders_json` (broker-ready), `logs_path`, `ci_reports` (E[PnL]/POP intervals), `runtime_s`.
+- **Validation**: Diagnostics must include filter rejection breakdown and pricer failures; runtime recorded for SC-001/SC-012 checks.
 
-### PricePath
-- **Fields**: `paths` (np.ndarray|memmap) shape `[n_paths, n_steps]`, `n_paths` (int), `n_steps` (int), `s0` (float), `storage` (enum: memory, npz, memmap), `seed` (int), `estimated_gb` (float).
-- **Validation**: `n_paths * n_steps * 8 bytes` (×1.1 overhead) must respect RAM thresholds (<25% in-memory; ≥25% triggers memmap/npz; ≥50% abort); seed mandatory for replay; memmap requires file handle in run dir.
-- **Relationships**: Consumed by `Strategy` evaluations and option pricers.
-
-### StrategyParams
-- **Fields**: `name` (str), `kind` (enum: stock, option), `params` (typed dict: floats/ints/enums per strategy), `position_sizing` (enum: fixed_notional, percent_equity), `fees` (float ≥0, default 0.0005 of notional), `slippage` (float ≥0, default 0.65 per option contract).
-- **Validation**: Strategy-specific schema enforced; no negative sizing; DTE/strike offsets valid for option strategies; defaults MUST be captured in run_meta.
-- **Relationships**: Drives `StrategySignals`; ties to `OptionSpec` when `kind=option`.
-
-- ### OptionSpec
-- **Fields**: `option_type` (enum: call, put), `strike` (float or relative offset string like `atm`, `+0.05`), `maturity_days` (int), `implied_vol` (float >0), `risk_free_rate` (float), `contracts` (int !=0), `iv_source` (enum: yfinance, realized_vol, config_default).
-- **Validation**: `maturity_days >= simulation horizon`; IV > 0 and < 5; strike positive; contracts non-zero; record IV source; warning when IV source falls back; `early_exercise` flag allowed when matched with American-capable pricer.
-- **Relationships**: Passed to `OptionPricer`; linked from `StrategyParams`/`StrategySignals`.
-
-### StrategySignals
-- **Fields**: `signals_stock` (int8 array `[n_paths, n_steps]` in {-1,0,1}), `signals_option` (int8 array `[n_paths, n_steps]`), `option_spec` (OptionSpec|null), `features_used` (list[str]).
-- **Validation**: Shapes must match `PricePath`; `option_spec` required when option signals non-empty; `features_used` recorded for reproducibility.
-- **Relationships**: Output of `Strategy`; consumed by `SimulationRun`.
-
-```python
-# interfaces/strategy.py
-
-from abc import ABC, abstractmethod
-from typing import Dict, Any
-import pandas as pd
-
-class Strategy(ABC):
-    """
-    A pluggable trading strategy that consumes price and feature data and
-    emits timestamp-aligned signals for stock and/or option positions.
-    """
-
-    @abstractmethod
-    def generate_signals(
-        self,
-        prices: pd.DataFrame,
-        features: pd.DataFrame,
-        params: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """
-        Returns something like:
-        {
-          "stock": np.ndarray,
-          "option": {
-             "position": np.ndarray,
-             "spec": OptionSpec
-          }
-        }
-        """
-```
-
-### CandidateSelector
-- **Fields**: `name` (str), `rules` (list of predicates e.g., gap %, volume z-score), `feature_requirements` (list[str]), `min_lookback` (int), `min_episodes` (int default 30).
-- **Validation**: Rules only use info available at time t; feature dependencies resolved before evaluation; warn on missing features; must produce ≥min_episodes or trigger fallback.
-- **Relationships**: Generates `CandidateEpisode` sets; conditions both historical backtests and conditional MC.
-
-### CandidateEpisode
-- **Fields**: `symbol` (str), `t0` (timestamp), `horizon` (int bars), `state_features` (dict[str, float]), `selector_name` (str).
-- **Validation**: `t0` exists in historical data; `horizon > 0`; `state_features` keys match selector requirements; `maturity_days >= horizon` when paired with option specs.
-- **Relationships**: Feeds conditional backtests and conditional MC sampling.
-
-### SimulationRun
-- **Fields**: `run_id` (uuid/str), `symbol` (str or list), `config` (RunConfig), `distribution` (ReturnDistribution), `price_paths` (PricePath), `strategies` (list[StrategyParams]), `episodes` (list[CandidateEpisode]|null), `artifacts_path` (abs path), `system_info` (cpu_count, ram_gb, os), `git_sha` (str).
-- **Validation**: Unique run_id; seed in config; conditional runs require non-empty episodes or documented fallback; artifacts path writable; system_info/git_sha captured for reproducibility.
-- **Relationships**: Orchestrates MC generation, strategy execution, metrics, and artifact emission.
-
--### RunConfig
-- **Fields**: `n_paths` (int), `n_steps` (int), `seed` (int), `distribution_model` (enum), `data_source` (enum), `selector` (CandidateSelector|null), `grid` (list[StrategyParams]|null), `resource_limits` ({`max_workers` int, `mem_threshold` float, `runtime_budget_s` int, `reserved_cores` int default 2}), `covariance_estimator` (enum: sample, ledoit_wolf, shrinkage_delta), `var_method` (enum: parametric, historical), `lookback_window` (int bars).
-- **Validation**: Enforce FR-018 limits; reject configs exceeding RAM/time estimates; seed required; `max_workers <= 6` on 8-core VPS by default and `max_workers <= cores - reserved_cores`; resource limits stored in run_meta.
-- **Relationships**: Stored within `SimulationRun` and `run_meta.json` for replay (FR-019).
-
--### MetricsReport
-- **Fields**: `per_config_metrics` (list of `{config_id, pnl_stats, drawdown, var, cvar, sharpe, sortino, objective, var_method, lookback, bankruptcy_rate}`), `comparison` (stock vs option summary), `conditional_metrics` (episode-level stats), `logs_path` (str), `plots` (optional paths), `parameter_stability` (optional rolling SE/CI metadata), `early_exercise_events` (optional list).
-- **Validation**: Objective function defined; metrics arrays align with configs; conditional metrics only when episodes provided; VaR/CVaR must include estimator/window metadata; `bankruptcy_rate` captured when any MC paths hit ≤0; early exercise events recorded when applicable.
-- **Relationships**: Generated from `SimulationRun`; persisted as JSON/CSV; referenced by quickstart/CLI outputs.
-
-## Relationships Overview
-- `DataSource` → `ReturnDistribution` → `PricePath` → `StrategySignals` → `SimulationRun` → `MetricsReport`.
-- `CandidateSelector` → `CandidateEpisode` feeds both conditional backtests and conditional MC sampling.
-- `RunConfig` ties all components together and is persisted for replay.
+## Relationships
+- Regime → DistributionEngine → paths → OptionPricer valuations → Metrics → StrategyScorer → Ranking.
+- CandidateStructure generated from option chain + filters; Metrics attach to CandidateStructure; RunArtifacts cache ordered outputs.
+- Position uses CandidateStructure + updated market data for monitoring; reuses OptionPricer and DistributionEngine for remaining horizon paths.
 
 ## State & Lifecycle
-1. Load OHLCV from `DataSource` (validate schema).
-2. Fit `ReturnDistribution` (persist params/seed).
-3. Generate `PricePath` (select storage policy based on RAM threshold).
-4. Produce `StrategySignals` (feature-enriched as configured; includes OptionSpec when needed).
-5. Execute `SimulationRun` (stock + option strategies, grid optional) over unconditional or conditional episodes.
-6. Emit `MetricsReport` + artifacts + `run_meta.json` for reproducibility.
-7. Optional replay uses `run_meta.json` and persisted MC data if available; otherwise regenerates with same seed/params.
-## Example SimulationRun (JSON)
-
-```json
-{
-  "run_id": "2024-11-16T01-compare-aapl",
-  "symbol": "AAPL",
-  "config": {
-    "n_paths": 1000,
-    "n_steps": 60,
-    "seed": 42,
-    "distribution_model": "laplace",
-    "data_source": "yfinance",
-    "selector": null,
-    "resource_limits": {"max_workers": 6, "mem_threshold": 0.25, "runtime_budget_s": 900},
-    "covariance_estimator": "ledoit_wolf",
-    "var_method": "historical",
-    "lookback_window": 252
-  },
-  "distribution": {"model": "laplace", "params": {"loc": 0.0, "scale": 0.012}, "fit_window": 252, "seed": 42, "estimator": "mle", "loglik": -1234.5, "aic": 2469.0, "bic": 2480.0},
-  "price_paths": {"storage": "memory", "n_paths": 1000, "n_steps": 60, "s0": 190.0, "seed": 42, "estimated_gb": 0.005},
-  "strategies": [
-    {"name": "stock_basic", "kind": "stock", "params": {"threshold": 0.01}, "position_sizing": "fixed_notional", "fees": 0.0, "slippage": 0.0},
-    {"name": "call_basic", "kind": "option", "params": {"entry": "atm"}, "position_sizing": "fixed_notional", "fees": 0.0, "slippage": 0.0,
-     "option_spec": {"option_type": "call", "strike": "atm", "maturity_days": 60, "implied_vol": 0.25, "risk_free_rate": 0.05, "contracts": 1}}
-  ],
-  "episodes": null,
-  "artifacts_path": "runs/2024-11-16T01-compare-aapl",
-  "system_info": {"cpu_count": 8, "ram_gb": 24, "os": "linux"},
-  "git_sha": "abc123"
-}
-```
+1. Load option chain (Schwab API) and config/regime.
+2. Stage 0/1 filter expiries and strikes; Stage 2 generate structures.
+3. Stage 3 analytic prefilter computes approximate metrics and applies hard constraints, keeping top K per structure.
+4. Stage 4 MC scoring computes full metrics, confidence intervals, and scores.
+5. Rank, emit Top-10 + cache Top-100 + diagnostics + orders JSON.
+6. Monitoring flow loads Position JSON, fetches live data, recomputes remaining-horizon metrics/alerts, and logs/outputs events.
