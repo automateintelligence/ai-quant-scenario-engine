@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 from quant_scenario_engine.features.technical import compute_all_features
 from quant_scenario_engine.interfaces.distribution import ReturnDistribution
@@ -20,6 +21,7 @@ class RunResult:
     metrics: MetricsReport
     signals: StrategySignals
     s0: float
+    audit_metadata: Optional[dict] = None
 
 
 def _build_signals(
@@ -97,6 +99,7 @@ def run_compare(
     lookback_window: int | None = None,
     features: dict | None = None,
     compute_features: bool = True,
+    audit_metadata: Optional[dict] = None,
 ) -> RunResult:
     """
     Generate MC paths, run stock vs option strategies, and return comparative metrics.
@@ -151,4 +154,4 @@ def run_compare(
         covariance_estimator=covariance_estimator,
         lookback_window=lookback_window,
     )
-    return RunResult(metrics=metrics, signals=signals, s0=s0)
+    return RunResult(metrics=metrics, signals=signals, s0=s0, audit_metadata=audit_metadata)

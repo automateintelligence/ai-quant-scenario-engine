@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 
@@ -36,6 +38,10 @@ def compare(
     iv: float | None = typer.Option(None, help="Implied volatility"),
     rfr: float | None = typer.Option(None, help="Risk-free rate"),
     use_audit: bool = typer.Option(True, "--use-audit/--no-use-audit", help="Prefer cached validated distribution models"),
+    audit_lookback_days: Optional[int] = typer.Option(None, "--audit-lookback-days", help="Override lookback days when locating cached audits"),
+    audit_end_date: Optional[str] = typer.Option(None, "--audit-end-date", help="Override end date (YYYY-MM-DD) for cached audits"),
+    audit_data_source: Optional[str] = typer.Option(None, "--audit-data-source", help="Override data source identifier used in the audit cache key"),
+    audit_cache_dir: Optional[Path] = typer.Option(None, "--audit-cache-dir", help="Custom directory containing cached audit results"),
 ) -> None:
     defaults = {
         "symbol": None,
@@ -51,6 +57,10 @@ def compare(
         "iv": 0.2,
         "rfr": 0.01,
         "use_audit": True,
+        "audit_lookback_days": None,
+        "audit_end_date": None,
+        "audit_data_source": None,
+        "audit_cache_dir": None,
     }
     cli_values = {
         "symbol": symbol,
@@ -66,6 +76,10 @@ def compare(
         "iv": iv,
         "rfr": rfr,
         "use_audit": use_audit,
+        "audit_lookback_days": audit_lookback_days,
+        "audit_end_date": audit_end_date,
+        "audit_data_source": audit_data_source,
+        "audit_cache_dir": str(audit_cache_dir) if audit_cache_dir else None,
     }
     casters = {
         "symbol": str,
@@ -81,6 +95,10 @@ def compare(
         "iv": float,
         "rfr": float,
         "use_audit": lambda v: str(v).lower() in {"1", "true", "yes", "on"},
+        "audit_lookback_days": int,
+        "audit_end_date": str,
+        "audit_data_source": str,
+        "audit_cache_dir": str,
     }
 
     cfg = load_config_with_precedence(
@@ -105,17 +123,30 @@ def compare(
         distribution=cfg["distribution"],
     )
 
+    if str(cfg.get("distribution", "")).lower() == "audit":
+        cfg["use_audit"] = True
+
     progress = ProgressReporter(total=3, log=log, component="compare")
     log.info("Starting compare run", extra={"symbol": cfg["symbol"]})
     dist = None
     audit_metadata = None
     if cfg.get("use_audit"):
-        loaded = load_validated_model(symbol=cfg["symbol"], lookback_days=None, end_date=None, data_source=None)
+        loaded = load_validated_model(
+            symbol=cfg["symbol"],
+            lookback_days=cfg.get("audit_lookback_days"),
+            end_date=cfg.get("audit_end_date"),
+            data_source=cfg.get("audit_data_source"),
+            cache_dir=cfg.get("audit_cache_dir"),
+        )
         dist = loaded.distribution
         audit_metadata = loaded.metadata
         log.info(
             "Using audit-driven distribution",
-            extra={"model": audit_metadata.get("model_name"), "validated": audit_metadata.get("model_validated")},
+            extra={
+                "model": audit_metadata.get("model_name"),
+                "validated": audit_metadata.get("model_validated"),
+                "cache_path": audit_metadata.get("cache_path"),
+            },
         )
     else:
         dist = get_distribution(cfg["distribution"])
@@ -141,7 +172,18 @@ def compare(
         stock_strategy=cfg["strategy"],
         option_strategy=cfg["option_strategy"],
         option_spec=option_spec,
+        audit_metadata=audit_metadata,
     )
     progress.tick("Simulation finished")
     typer.echo(result.metrics)
+    if result.audit_metadata:
+        typer.echo(json.dumps({"distribution_audit": result.audit_metadata}, indent=2))
+        if not result.audit_metadata.get("model_validated"):
+            fallback_reason = result.audit_metadata.get("fallback_reason")
+            warning = "Distribution audit data is not validated"
+            if result.audit_metadata.get("cache_stale"):
+                warning = "Distribution audit cache is stale; consider re-running audit"
+            if fallback_reason:
+                warning = f"Audit fallback in effect: {fallback_reason}"
+            typer.echo(f"WARNING: {warning}")
     progress.tick("Compare completed")

@@ -17,6 +17,20 @@ def test_run_compare_executes():
         risk_free_rate=0.01,
         contracts=1,
     )
-    result = run_compare(s0=100.0, distribution=dist, n_paths=5, n_steps=5, seed=123, option_spec=spec)
+    audit_meta = {"model_name": "laplace", "model_validated": True}
+    result = run_compare(
+        s0=100.0,
+        distribution=dist,
+        n_paths=5,
+        n_steps=5,
+        seed=123,
+        stock_strategy="stock_basic",
+        option_strategy="call_basic",
+        option_spec=spec,
+        audit_metadata=audit_meta,
+        features={},
+        compute_features=False,
+    )
     assert result.metrics.mean_pnl is not None
     assert result.signals.option_spec == spec
+    assert result.audit_metadata == audit_meta
