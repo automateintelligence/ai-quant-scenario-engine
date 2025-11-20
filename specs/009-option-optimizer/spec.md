@@ -131,7 +131,7 @@ Monte Carlo estimates (E[PnL], POP, VaR, CVaR) include confidence intervals to q
 
 After selecting a trade, users can run continuous monitoring that periodically reprices the position using updated market data, recomputes remaining-horizon metrics (POP, E[PnL], tail risk), checks early-exit conditions, and alerts when thresholds are breached.
 
-**Why this priority**: Bridges pre-trade optimization (009-option-optimizer) to intraday risk management—enables systematic profit-taking and stop-loss logic. Essential for live trading but not required for backtesting/research MVP.
+**Why this priority**: Bridges pre-trade optimization (009-option-optimizer) to intraday risk management—enables systematic profit-taking and stop-loss logic. Essential for live trading but not required for qse/research MVP.
 
 **Independent Test**: Can be tested by: (1) running optimizer to select a trade, (2) exporting position to JSON, (3) launching `qse monitor --position my_trade.json --interval 5min`, (4) simulating underlying price movement, (5) verifying that system reprices position, updates metrics, and triggers alert when early-exit condition is met (e.g., PnL reaches profit target or stop-loss).
 
