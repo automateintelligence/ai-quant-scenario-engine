@@ -2645,3 +2645,84 @@ python -m qse.cli audit-distributions --symbol AAPL --force-refit
 python -m qse.cli compare --symbol AAPL --use-audit  # picks up fresh cache temporarily run compare with --no-use-audit until the code changes settle.
 
 /speckit.implement "Implement incomplete tasks for Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. For any development in distribution_audit.py, if there are 'TODO' items linked to tasks, be sure to mark them as completed.  Be sure to mark completed tasks in tasks.md."
+
+python -m quant_scenario_engine.cli audit-distributions --symbol AAPL --force-refit
+python -m quant_scenario_engine.cli compare --symbol AAPL --use-audit  # picks up fresh cache temporarily run compare with --no-use-audit until the code changes settle.
+
+Perfect! I've successfully completed the 009-option-optimizer specification following the SpecKit
+workflow. Here's what was accomplished:
+
+✅ Specification Complete: Option Strategy Optimizer (009-option-optimizer)
+
+Created Files
+
+1. specs/009-option-optimizer/spec.md (341 lines)
+  - 8 prioritized user stories (P1: core optimizer, P2: enhanced features, P3:
+advanced capabilities)
+  - 75 functional requirements organized by domain
+  - 12 measurable success criteria
+  - 9 edge cases with diagnostic messages
+  - 15 scoped assumptions
+2. specs/009-option-optimizer/checklists/requirements.md (228 lines)
+  - Complete traceability matrix mapping US → FR → SC
+  - All checklist items validated and passing
+  - Quality verification with evidence references
+
+Key Architectural Foundations
+
+Core Value Proposition (Priority P1):
+- US1: Single-command optimization returning Top-10 trades in <30 seconds
+- US2: Multi-stage filtering (1000 candidates → 200 survivors → Top-10) for
+computational tractability
+- US3: Regime-driven distribution (8 qualitative labels: neutral, strong-bullish,
+etc.)
+
+Enhanced Features (Priority P2):
+- US4: Pluggable pricing models (BS, Bjerksund-Stensland, Heston, SLV/SVI)
+- US5: Composite scoring with configurable weights (POP, ROC, Theta, Greek penalties)
+- US6: Transaction cost modeling (pay-the-spread + $0.65/contract commission)
+
+Advanced Capabilities (Priority P3):
+- US7: Confidence intervals with adaptive MC paths (5k → 20k when variance high)
+- US8: Live position monitoring with early-exit alerts (profit target/stop loss)
+
+Integration with US1
+
+Shared Components (FR-071 to FR-073):
+- OptionPricer interface → US1 MarketSimulator + US9 optimizer both use same pricers
+- Distribution models → GARCH-t, Student-t, Laplacian shared across US1/US9
+- Single config.yml → Shared sections (pricing, distributions, regimes) + US-specific
+scoring
+
+Performance Targets
+
+- SC-001: <30 seconds for Top-10 on typical chain (15 strikes × 4 expiries)
+- SC-002: Filtering reduces 1000+ candidates to <200 for full MC scoring
+- SC-012: Batch process 10 underlyings in 5 minutes (<30s each)
+
+Traceability Highlights
+
+The requirements checklist maps:
+- 28 acceptance scenarios across 8 user stories
+- 75 functional requirements to originating user stories
+- 12 success criteria to measurable outcomes
+- 11 Q&A answers from planning document incorporated throughout
+
+Next Steps
+
+The specification is ready for:
+- /speckit:plan → Create technical implementation plan
+- /speckit:clarify → Resolve any remaining questions (none currently)
+
+Repository State
+
+- Branch: 009-option-optimizer
+- Worktree: /home/danie906/programming/ai/quant-scenario-engine-us9
+- Commit: a03ac80 - "US9: Complete specification for Option Strategy Optimizer"
+- Files Staged: spec.md (new), requirements.md (new)
+
+The specification is complete, validated, and ready for planning phase. All discovery
+questions from the brainstorming session have been incorporated, and the architecture
+is designed to integrate seamlessly with existing US1 infrastructure.
+
+Replaced US9 with feature branch name, because sped.md has multiple user stories.):planning/project_log_009.md

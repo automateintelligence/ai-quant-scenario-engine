@@ -1,16 +1,16 @@
 /superpowers:brainstorm "I have a new user story (US) for this project.  I want everything to remain modular because I have lots of different uses for this library and its capabilities.  Later we will connect backend to a front-end UI.  My stated User Story 1 from 'specs/001-mvp-pipeline/spec.md' is to compare a stock trading strategy to an option trading strategy, assuming the same underlying and a given --stock-strategy and --option-strategy. The US1 stock-vs-option comparison already uses a concrete pricing model. The MarketSimulator (qse/simulation/simulator.py (lines 10-90)) wires a BlackScholesPricer from qse/pricing/black_scholes.py and, for every Monte Carlo path, reprices the option leg along that path to compute P&L/equity curves. So US1’s CLI compare command is evaluating stock signals directly on price paths while valuing the option strategy via closed-form Black–Scholes (European, CPU-friendly) with strike/IV/maturity pulled from OptionSpec. When you swap to a different pricer later (e.g., PyVollib), you’ll do it by supplying a different implementation of that same interface, but today the baseline Black–Scholes engine is what powers every option trade comparison.  
 
-However for User Story 9 (US9), I would like to start with an assumption about the underlying stock like: 'neutral', 'strong-neutral', 'low-volatility', 'volatility-dir-uncertain', 'mild-bearish', 'strong-bearish', 'mild-bullish', 'strong-bullish' - all based on expected price movements and ranges of standard deviations or expected $ movement. i.e. 'strong-bullish' would be a move of >6% price change or 3 stddev, 'neutral' would be < 2% price change or 50% probability, 'volatility-dir-uncertain' would be +/- 3% price change or +/- 1 stddev.  This with inputs of its strike price, volume, volatility, basically everthing needed to price options.  Then run through a library of option trading strategies to optimize based on a --strategy-score.  I want to answer the question, "Given an underlying stock, a price direction assumption, and my option trade optimization constraints, in the universe of option spread positions, which one(s) are the best?"
+However for User Story 9 (009-option-optimizer), I would like to start with an assumption about the underlying stock like: 'neutral', 'strong-neutral', 'low-volatility', 'volatility-dir-uncertain', 'mild-bearish', 'strong-bearish', 'mild-bullish', 'strong-bullish' - all based on expected price movements and ranges of standard deviations or expected $ movement. i.e. 'strong-bullish' would be a move of >6% price change or 3 stddev, 'neutral' would be < 2% price change or 50% probability, 'volatility-dir-uncertain' would be +/- 3% price change or +/- 1 stddev.  This with inputs of its strike price, volume, volatility, basically everthing needed to price options.  Then run through a library of option trading strategies to optimize based on a --strategy-score.  I want to answer the question, "Given an underlying stock, a price direction assumption, and my option trade optimization constraints, in the universe of option spread positions, which one(s) are the best?"
 
 I want you to help me define a fully modular, strategy-agnostic **option-trade scoring framework** that evaluates any option structure (single-leg, vertical, Back/Taio, Calendar, Diagonal, straddle, strangle, Collar, Butterfly, Condor, Iron Condor, Vertical Roll, Double Diagonal, Deep and Wide, etc.) under an assumed distribution of next-day price movements.
 
-This is for **User Story 9 (US9)**, which differs from US1.
+This is for **User Story 9 (009-option-optimizer)**, which differs from US1.
 US1 compares stock-vs-option for a given strategy.
-US9 instead scores and optimizes **option strategies alone**, given an assumption about the **next-day underlying price movement regime**.
+009-option-optimizer instead scores and optimizes **option strategies alone**, given an assumption about the **next-day underlying price movement regime**.
 
-### **1. Underlying-Movement Regime Assumptions (Input to US9)**
+### **1. Underlying-Movement Regime Assumptions (Input to 009-option-optimizer-option-optimizer)**
 
-US9 begins with the user inputs providing a underlying stock pricing, technicals and fundamentals with a qualitative regime label for the expected next-day movement of the underlying stock.  We will focus on trading stocks with high volume, so we can make some assumptions about the liquidity of the options. These labels map to numerical distribution priors over return magnitude and direction:
+009-option-optimizer begins with the user inputs providing a underlying stock pricing, technicals and fundamentals with a qualitative regime label for the expected next-day movement of the underlying stock.  We will focus on trading stocks with high volume, so we can make some assumptions about the liquidity of the options. These labels map to numerical distribution priors over return magnitude and direction:
 - **neutral** → absolute move < 2% price or within ~0.5σ
 - **strong-neutral** → absolute move < 1% or within ~0.25σ
 - **low-volatility** → absolute move < 1% but narrower return distribution
@@ -24,7 +24,7 @@ These labels should be convertible into distribution parameters for **Monte Carl
 
 ### **2. Pricing Models (Pluggable Architecture)**
 
-US9 must allow swapping pricing models. At a minimum, we want support for:
+009-option-optimizer must allow swapping pricing models. At a minimum, we want support for:
 * **Black–Scholes** (baseline, European, CPU-efficient)
 * **Bjerksund–Stensland** (recommended default for equity—American exercise, fast, closed-form approximation)
 * **Heston** (stochastic volatility; calibrated to IV surface; pathwise simulation)
@@ -61,9 +61,9 @@ Remaining horizon: H_remaining = max(1, H_total - days_elapsed)
 Run MC paths from “now” out to H_remaining.
 Compute PnL_Hremaining, POP, tail risk.
 
-### **3. Monte Carlo Expectations (Core of US9 Scoring)**
+### **3. Monte Carlo Expectations (Core of 009-option-optimizer-option-optimizer Scoring)**
 
-For each option strategy candidate, US9 must estimate:
+For each option strategy candidate, 009-option-optimizer must estimate:
 * Expected one-day P&L:
   `E[PnL_H]` computed by repricing the position across simulated paths.
 * Probability of profit (break-even POP):
@@ -77,7 +77,7 @@ For each option strategy candidate, US9 must estimate:
   * `VaR_5%`
   * `CVaR_5%`
 
-## US9 should allow swapping among these engines:
+## 009-option-optimizer should allow swapping among these engines:
 Monte Carlo distributions can come from:
 1. **GARCH-t (baseline volatility-clustered, heavy-tailed model), Student-t (fast - seems to be a good fit for NVDA and AAPL), or Laplacian** best fit from distribution_audit.py
 2. **Regime-conditioned bootstrap** (nonparametric resampling of historical bars matching current regime)
@@ -125,7 +125,7 @@ Before computing the composite score, reject any candidate trade that violates:
 
 ### **6. Composite Strategy Score (intraday-spreads)**
 
-US9 uses a composite weighted score to rank candidate option structures.
+009-option-optimizer uses a composite weighted score to rank candidate option structures.
 This model includes POP, ROC, risk, and Greeks.
 
 Normalized components:
@@ -173,7 +173,7 @@ Default weights reflecting business priorities:
   * For short premium spreads, you’re short vega; IV spikes hurt.
   * You may want to penalize large |V| for stability.
 
-US9’s optimizer should compute:
+009-option-optimizer’s optimizer should compute:
 * Spread Candidates
 * The multi-stage scoring result
 * A diagnostic bundle (why the score is what it is)
@@ -394,7 +394,7 @@ You can literally codify a candidate generation policy like:
    * Compute full `intraday-spreads` score.
    * Rank & return.
 
-### **8. Deliverable for US9**
+### **8. Deliverable for 009-option-optimizer**
 
 Given:
 * An underlying-movement type like “strong-bullish”
@@ -403,7 +403,7 @@ Given:
 * Access to one of the pricing engines
 * The Monte Carlo distribution model
 
-US9 must:
+009-option-optimizer must:
 1. Generate candidate option structures (verticals, calendars, strangles, etc.)
 2. Compute all metrics (POP, ROC, Greeks, tail risk)
 3. Apply filters
@@ -413,24 +413,24 @@ US9 must:
 7. Use one config.yml file for all parameter selections (stock and option pricing models to be used, spread types to be explored, # strike prices, # expirations, trade horizon, profit_target, etc.)
 
 Generate:
-Before we build the **complete spec** for US9 (SDD-ready) in specs/spec.md, do you have anything to add?
+Before we build the **complete spec** for 009-option-optimizer (SDD-ready) in specs/spec.md, do you have anything to add?
 "
 
 Generate:
-* The **complete spec** for US9 (SDD-ready) in specs/spec.md
+* The **complete spec** for 009-option-optimizer (SDD-ready) in specs/spec.md
 * A **unified StrategyScore interface** to plug into any strategy
 * Or the **English-to-code prompt template** for superpowers to generate the implementation.
 
 
-🤔 Superpowers/brainstorm - Discovery Questions for US9 Refinement
+🤔 Superpowers/brainstorm - Discovery Questions for 009-option-optimizer Refinement
 
-Your US9 proposal is comprehensive and well-architected. Before we formalize the spec,
+Your 009-option-optimizer proposal is comprehensive and well-architected. Before we formalize the spec,
 let me ask some clarifying questions to ensure we address the gaps I've identified:
 
 ---
 1. Option Chain Data Sourcing
 
-Q1.1: Where will option chain data come from for US9?
+Q1.1: Where will option chain data come from for 009-option-optimizer?
 A: Schwab API - usage outlined in 'docs/*.pdf'
 
 Q1.2: What are your data freshness requirements?
@@ -614,12 +614,12 @@ A: Target <30 seconds to recompute the Top-10 at market open using after-hours d
 ---
 9. Integration with US1
 
-Q9.1: Should US9 and US1 share the same pricing engines?
+Q9.1: Should 009-option-optimizer and US1 share the same pricing engines?
 - Yes: Extract common OptionPricer interface that both use ✅
 - No: Keep separate for simplicity (risk: code duplication)
-A: Yes — US1 and US9 should share the same OptionPricer interface to avoid duplication and guarantee consistent pricing across the system. Only the simulation/scoring layers differ.
+A: Yes — US1 and US6 should share the same OptionPricer interface to avoid duplication and guarantee consistent pricing across the system. Only the simulation/scoring layers differ.
 
-Q9.2: Can the same config.yml work for both US1 and US9?
+Q9.2: Can the same config.yml work for both US1 and US6?
 - Shared sections (pricing, distributions) + US-specific sections?
 - Or completely separate configs?
 A: A single config.yml can serve both if you use shared sections (pricing, distributions, regime mapping) + US-specific subsections (e.g., intraday-spreads vs stock-vs-option). No need for two separate configs.
@@ -663,7 +663,7 @@ A: After intraday-spreads, next priority scorers are directional-bullish/bearish
 Q11.2: Should scoring functions be plugin-style?
 - User can drop in a Python file: my_scorer.py defining MyScorer(StrategyScorer)?
 - Or all built-in only (simpler but less flexible)?
-A: Yes — scoring functions should be plugin-style, allowing users to drop in new scorer classes without modifying core code. This preserves modularity and aligns with US9’s role as a generic options strategy optimizer."
+A: Yes — scoring functions should be plugin-style, allowing users to drop in new scorer classes without modifying core code. This preserves modularity and aligns with 009-option-optimizer’s role as a generic options strategy optimizer."
 
 
 
