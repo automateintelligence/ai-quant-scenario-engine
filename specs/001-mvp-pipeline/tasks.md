@@ -609,9 +609,9 @@ def mock_run_config():
 
 #### Error Handling (US6a AS11-12)
 
-- [ ] T180 [P] [US6a] Implement insufficient data handler in quant_scenario_engine/distributions/errors/data_errors.py skipping models when sample size < minimum (GARCH-t ≥252) with warning per spec.md US6a AS11
-- [ ] T181 [P] [US6a] Create convergence failure handler in quant_scenario_engine/distributions/errors/convergence_errors.py logging diagnostics, marking model "FAILED", continuing with others per spec.md US6a AS12
-- [ ] T182 [US6a] Implement audit failure logic in quant_scenario_engine/distributions/distribution_audit.py failing entire audit only if all three models fail to converge per spec.md US6a AS12
+- [X] T180 [P] [US6a] Implement insufficient data handler in quant_scenario_engine/distributions/errors/data_errors.py skipping models when sample size < minimum (GARCH-t ≥252) with warning per spec.md US6a AS11
+- [X] T181 [P] [US6a] Create convergence failure handler in quant_scenario_engine/distributions/errors/convergence_errors.py logging diagnostics, marking model "FAILED", continuing with others per spec.md US6a AS12
+- [X] T182 [US6a] Implement audit failure logic in quant_scenario_engine/distributions/distribution_audit.py failing entire audit only if all three models fail to converge per spec.md US6a AS12
 
 **Checkpoint**: User Story 6a complete - distribution models validated and selected through empirical evidence, integrated with US1/US6 Monte Carlo workflows
 

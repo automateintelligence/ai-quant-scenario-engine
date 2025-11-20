@@ -37,6 +37,11 @@ import numpy as np
 import pandas as pd
 
 from quant_scenario_engine.distributions.diagnostics.tail_report import build_tail_report
+from quant_scenario_engine.distributions.errors import (
+    handle_insufficient_data,
+    has_minimum_samples,
+    record_convergence_failure,
+)
 from quant_scenario_engine.distributions.fitters.garch_t_fitter import GarchTFitter
 from quant_scenario_engine.distributions.fitters.laplace_fitter import LaplaceFitter
 from quant_scenario_engine.distributions.fitters.student_t_fitter import StudentTFitter
@@ -53,6 +58,7 @@ from quant_scenario_engine.distributions.validation.mc_path_generator import gen
 from quant_scenario_engine.distributions.validation.volatility_calc import annualized_volatility
 from quant_scenario_engine.distributions.validation.clustering_calc import autocorr_squared_returns
 from quant_scenario_engine.distributions.validation.extreme_moves import extreme_move_frequencies
+from quant_scenario_engine.distributions.validation.stationarity import MIN_SAMPLES
 from quant_scenario_engine.distributions.integration.cache_checker import warn_if_stale
 from quant_scenario_engine.distributions.cache.cache_manager import get_cache_path, is_fresh, load_cache, save_cache, TTL_DAYS
 from quant_scenario_engine.distributions.cache.serializer import deserialize_payload, serialize_payload
@@ -165,6 +171,16 @@ def _rehydrate_fit_results(raw_items: Sequence[FitResult | dict]) -> List[FitRes
     return fits
 
 
+def _rehydrate_scores(raw_items: Sequence[ModelScore | dict]) -> List[ModelScore]:
+    scores: List[ModelScore] = []
+    for item in raw_items:
+        if isinstance(item, ModelScore):
+            scores.append(item)
+        else:
+            scores.append(ModelScore(**item))
+    return scores
+
+
 # ---------------------------------------------------------------------------
 # Core pipeline functions
 # ---------------------------------------------------------------------------
@@ -173,6 +189,8 @@ def _rehydrate_fit_results(raw_items: Sequence[FitResult | dict]) -> List[FitRes
 def fit_candidate_models(
     returns: np.ndarray,
     candidate_models: Sequence[ModelSpec],
+    *,
+    symbol: str | None = None,
 ) -> List[FitResult]:
     """
     Fit each candidate model to the return series and compute AIC/BIC and
@@ -194,7 +212,21 @@ def fit_candidate_models(
     n = len(returns)
     results: List[FitResult] = []
 
+    sample_count = len(returns)
+
     for spec in candidate_models:
+        required = MIN_SAMPLES.get(spec.name, 60)
+        if not has_minimum_samples(spec.name, sample_count, required):
+            results.append(
+                handle_insufficient_data(
+                    spec.name,
+                    sample_count,
+                    min_required=required,
+                    symbol=symbol,
+                )
+            )
+            continue
+
         try:
             fitter = spec.cls if hasattr(spec.cls, "fit") else spec.cls()
             fitted: FitResult = fitter.fit(returns)  # type: ignore[call-arg]
@@ -208,44 +240,20 @@ def fit_candidate_models(
                 )
             results.append(fitted)
         except DistributionFitError as exc:
-            message = str(exc)
-            log.warning(
-                "model fit failed; skipping",
-                extra={"model": spec.name, "error": message, "n_samples": n},
-            )
             results.append(
-                FitResult(
-                    model_name=spec.name,
-                    log_likelihood=float("nan"),
-                    aic=float("inf"),
-                    bic=float("inf"),
-                    params={},
-                    n=len(returns),
-                    heavy_tailed=False,
-                    fit_success=False,
-                    converged=False,
-                    error=message,
-                    warnings=[message],
-                    fit_message=f"skipped: {message}",
+                record_convergence_failure(
+                    spec.name,
+                    error=exc,
+                    n_samples=sample_count,
                 )
             )
         except Exception as exc:  # noqa: BLE001
-            message = str(exc)
-            log.warning("unexpected model fit failure", extra={"model": spec.name, "error": message})
             results.append(
-                FitResult(
-                    model_name=spec.name,
-                    log_likelihood=float("nan"),
-                    aic=float("inf"),
-                    bic=float("inf"),
-                    params={},
-                    n=len(returns),
-                    heavy_tailed=False,
-                    fit_success=False,
-                    converged=False,
-                    error=message,
-                    warnings=[message],
-                    fit_message=f"failed: {message}",
+                record_convergence_failure(
+                    spec.name,
+                    error=exc,
+                    n_samples=sample_count,
+                    stage="unexpected",
                 )
             )
 
@@ -705,6 +713,8 @@ def audit_distributions_for_symbol(
             data = deserialize_payload(json.dumps(cached))
             data["models"] = [m for m in (_rehydrate_model_spec(m) for m in data.get("models", [])) if m]
             data["fit_results"] = _rehydrate_fit_results(data.get("fit_results", []))
+            if data.get("scores"):
+                data["scores"] = _rehydrate_scores(data.get("scores", []))
             if data.get("best_model"):
                 data["best_model"] = _rehydrate_model_spec(data["best_model"])  # type: ignore[assignment]
             if data.get("best_fit") and not isinstance(data["best_fit"], FitResult):
@@ -724,10 +734,15 @@ def audit_distributions_for_symbol(
             ModelSpec(name="garch_t", cls=GarchTFitter(), config={}),
         ]
 
-    fit_results = fit_candidate_models(r_train, candidate_models)
+    fit_results = fit_candidate_models(r_train, candidate_models, symbol=symbol)
 
     if not any(fr.fit_success for fr in fit_results):
-        raise DistributionFitError("Distribution audit failed: no models converged")
+        status_summary = ", ".join(
+            f"{fr.model_name}={fr.fit_message or fr.error or 'failed'}" for fr in fit_results
+        )
+        raise DistributionFitError(
+            "Distribution audit failed: no models converged | " + status_summary
+        )
 
     tail_metrics = compute_tail_metrics(r_train, candidate_models)
 
