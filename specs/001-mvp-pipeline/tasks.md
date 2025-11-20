@@ -561,13 +561,12 @@ def mock_run_config():
 - [X] T149 [US6a] Create tail diagnostic report generator in qse/distributions/diagnostics/tail_report.py aggregating QQ plots, tail errors, kurtosis checks per spec.md US6a AS3
 
 #### VaR Backtesting (US6a AS4)
-
-- [X] T150 [US6a] Implement train/test splitter in qse/distributions/qse/data_split.py creating 70/30 split per spec.md US6a AS4
-- [X] T151 [P] [US6a] Implement Kupiec unconditional coverage test in qse/distributions/qse/kupiec_test.py testing H₀: breach frequency matches expected with p-value at α=0.05 per spec.md US6a AS4 (check T137 stub for existing test implementation)
-- [X] T152 [P] [US6a] Implement Christoffersen independence test in qse/distributions/qse/christoffersen_test.py testing H₀: breaches are independent with p-value at α=0.05 per spec.md US6a AS4
-- [X] T153 [US6a] Create VaR predictor in qse/distributions/qse/var_predictor.py generating one-step-ahead VaR at 95%/99% confidence per spec.md US6a AS4 (refit on train, predict on test)
-- [X] T154 [US6a] Implement breach counter in qse/distributions/qse/breach_counter.py counting actual vs expected VaR breaches per spec.md US6a AS4
-- [X] T155 [US6a] Create backtest results aggregator in qse/distributions/qse/backtest_report.py compiling breach counts, test statistics, pass/fail, diagnostic interpretation per spec.md US6a AS4
+- [X] T150 [US6a] Implement train/test splitter in qse/distributions/backtesting/data_split.py creating 70/30 split per spec.md US6a AS4
+- [X] T151 [P] [US6a] Implement Kupiec unconditional coverage test in qse/distributions/backtesting/kupiec_test.py testing H₀: breach frequency matches expected with p-value at α=0.05 per spec.md US6a AS4 (check T137 stub for existing test implementation)
+- [X] T152 [P] [US6a] Implement Christoffersen independence test in qse/distributions/backtesting/christoffersen_test.py testing H₀: breaches are independent with p-value at α=0.05 per spec.md US6a AS4
+- [X] T153 [US6a] Create VaR predictor in qse/distributions/backtesting/var_predictor.py generating one-step-ahead VaR at 95%/99% confidence per spec.md US6a AS4 (refit on train, predict on test)
+- [X] T154 [US6a] Implement breach counter in qse/distributions/backtesting/breach_counter.py counting actual vs expected VaR breaches per spec.md US6a AS4
+- [X] T155 [US6a] Create backtest results aggregator in qse/distributions/backtesting/backtest_report.py compiling breach counts, test statistics, pass/fail, diagnostic interpretation per spec.md US6a AS4
 
 #### Simulation Realism Validation (US6a AS5)
 

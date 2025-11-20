@@ -2646,8 +2646,8 @@ python -m qse.cli compare --symbol AAPL --use-audit  # picks up fresh cache temp
 
 /speckit.implement "Implement incomplete tasks for Phase 7a: User Story 6a. Be sure to pay particular attention to how this development must be integrated into the repo in regards to US1 and US6. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to follow the workflow in '.codex/speckit.implement.md'. For any development in distribution_audit.py, if there are 'TODO' items linked to tasks, be sure to mark them as completed.  Be sure to mark completed tasks in tasks.md."
 
-python -m quant_scenario_engine.cli audit-distributions --symbol AAPL --force-refit
-python -m quant_scenario_engine.cli compare --symbol AAPL --use-audit  # picks up fresh cache temporarily run compare with --no-use-audit until the code changes settle.
+python -m qse.cli audit-distributions --symbol AAPL --force-refit
+python -m qse.cli compare --symbol AAPL --use-audit  # picks up fresh cache temporarily run compare with --no-use-audit until the code changes settle.
 
 Perfect! I've successfully completed the 009-option-optimizer specification following the SpecKit
 workflow. Here's what was accomplished:
