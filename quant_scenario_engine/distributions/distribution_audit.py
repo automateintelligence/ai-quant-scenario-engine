@@ -87,10 +87,10 @@ class TailMetrics:
     """
     Tail-focused diagnostics for empirical vs model-implied returns.
 
-    TODO [T146, AS3]: Add 99.5% quantile fields per spec.md US6a AS3:
-    - var_emp_995: float
-    - var_model_995: float
-    - tail_error_995: float
+    TODO [T146, AS3 - scheduled]:
+    - Track 99.5% quantiles alongside 95%/99% so tail_report can expose VaR_99.5 deltas.
+    - Populate ``tail_error_995`` with normalized |model-empirical| and feed into selection scoring.
+    - When implemented, ensure `tail_report.py` consumes the extra fields for plotting and summary text.
     """
     model_name: str
     var_emp_95: float
@@ -271,12 +271,13 @@ def compute_tail_metrics(
     Compare empirical tail quantiles to model-implied tail quantiles using
     Monte Carlo or closed-form quantiles where available.
 
-    TODO [T146-T149, AS3]: Enhance tail diagnostics per spec.md US6a AS3:
-    - T146: Add 99.5% quantile to TailMetrics dataclass (currently only 95%, 99%)
-    - T147: Generate comprehensive Q-Q plots (not just error metrics)
-    - T148: Add tail error normalization: |model - empirical| / |empirical|
-    - T149: Create tail diagnostics report with visual plots and interpretation
-    - Update levels parameter default to (0.95, 0.99, 0.995)
+    TODO [T146-T149, AS3 - scheduled]:
+    - Extend ``levels`` default to ``(0.95, 0.99, 0.995)`` so the audit always samples VaR_99.5.
+    - Persist the extra quantile pairs to ``TailMetrics`` and expose them in ``tail_report`` / CLI formatter.
+    - Swap the naive Monte Carlo approximation with deterministic quantile functions exposed by each fitter
+      (Laplace/Student-T analytic quantiles, GARCH simulation) so reruns remain deterministic.
+    - Emit normalized tail errors for every configured level and surface them inside ``selection_report``
+      and CLI output (per US6a AS3 acceptance scenarios).
     """
     tail_results: List[TailMetrics] = []
 
@@ -329,23 +330,14 @@ def run_var_backtests(
     """
     Perform VaR backtests on an out-of-sample segment using each model.
 
-    TODO [T150-T155, AS4]: Implement proper VaR backtesting per spec.md US6a AS4:
-    - T150: Implement 70/30 train/test splitter (currently train_fraction parameter)
-    - T151: Implement Kupiec unconditional coverage test:
-            H₀: breach frequency = expected
-            Test statistic: -2×log(L_restricted/L_unrestricted)
-            Reject if p < 0.05 (model mis-calibrated)
-    - T152: Implement Christoffersen independence test:
-            H₀: breaches are serially independent
-            Test statistic based on transition matrix
-            Reject if p < 0.05 (breaches cluster)
-    - T153: Implement one-step-ahead VaR predictor (not static VaR from train!)
-            For Student-t/Laplace: use μ_train, σ_train
-            For GARCH-t: use dynamic conditional volatility σ_t
-    - T154: Implement breach counter with proper test statistics
-    - T155: Create backtest results aggregator with pass/fail logic:
-            Pass if p ≥ 0.01 on at least one test (Kupiec OR Christoffersen)
-            Catastrophic failure if p < 0.01 on BOTH tests
+    TODO [T150-T155, AS4 - scheduled]:
+    - Call ``backtesting.var_predictor`` to generate rolling one-step VaR forecasts instead of
+      sampling static returns from ``fitter.sample``.
+    - Replace placeholder p-values with the actual Kupiec (LR_uc) and Christoffersen (LR_ind) tests
+      defined under ``distributions.backtesting`` modules and persist their statistics in ``VarBacktestResult``.
+    - Compute breach counts via ``breach_counter.py`` and aggregate everything within
+      ``backtest_report.py`` so CLI output can summarize pass/fail decisions per AS4.
+    - Enforce FR requirement: audit must mark catastrophic failure when **both** tests return ``p < 0.01``.
     """
     results: List[VarBacktestResult] = []
 
@@ -354,7 +346,7 @@ def run_var_backtests(
             fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
 
             for level in levels:
-                # TODO [T153]: Implement proper one-step-ahead forecast logic per model
+                # TODO [T153 - scheduled]: Implement proper one-step-ahead forecast logic per model
                 # Current implementation uses static VaR - needs dynamic forecast!
 
                 # Placeholder: assume static VaR from train distribution
@@ -366,13 +358,13 @@ def run_var_backtests(
                 n_obs = len(returns_test)
                 expected_breaches = (1.0 - level) * n_obs
 
-                # TODO [T151]: Implement Kupiec test with proper likelihood ratio statistic
+                # TODO [T151 - scheduled]: Implement Kupiec test with proper likelihood ratio statistic
                 kupiec_pvalue = 1.0  # placeholder
 
-                # TODO [T152]: Implement Christoffersen test with transition matrix
+                # TODO [T152 - scheduled]: Implement Christoffersen test with transition matrix
                 christoffersen_pvalue = 1.0  # placeholder
 
-                # TODO [T155]: Apply proper pass/fail logic based on p-values
+                # TODO [T155 - scheduled]: Apply proper pass/fail logic based on p-values
                 # Pass if p ≥ 0.01 on at least one test (not both < 0.01)
                 passed = True  # placeholder
 
@@ -683,11 +675,9 @@ def audit_distributions_for_symbol(
     auto-load cached models for US1/US6, emit warnings when entries are stale,
     and fall back to Laplace while marking metadata when no audit exists.
 
-    TODO [T177-T179]: CLI command integration:
-    - T177: Create audit-distributions CLI command
-            Flags: --symbol, --lookback-days, --end-date, --force-refit
-    - T178: Wire CLI to this orchestrator function
-    - T179: Add audit results formatter (ranked models, scores, recommendation)
+    NOTE [T177-T179]: CLI integration is implemented via
+    ``quant_scenario_engine.cli.commands.audit_distributions`` and the
+    `audit_formatter`, so this orchestration entry point is already wired to the CLI command.
 
     Enhanced error handling (T180-T182, AS11-12) implemented: models with
     insufficient samples or convergence failures are logged and marked FAILED,
