@@ -18,9 +18,56 @@ A quantitative trader wants to identify the best option strategy given their mar
 **Acceptance Scenarios**:
 
 1. **Given** user provides ticker "NVDA", regime "strong-bullish", and default config, **When** optimizer runs, **Then** system returns Top-10 option strategies ranked by composite score with all metrics computed over the specified trade horizon
+
+   **Concrete Example**:
+   ```bash
+   $ qse optimize-strategy --ticker NVDA --regime strong-bullish --trade-horizon 1
+   ```
+   **Expected Output**:
+   - Returns exactly 10 `CandidateStructure` objects in JSON format
+   - Rank #1 (highest composite score): Iron Condor with strikes [$480, $485, $515, $520], E[PnL]=$642 [CI: $580-$704], POP_0=74%, POP_target=68%, ROC=4.2%, position Greeks: Delta=-0.03, Theta=+$28/day, Gamma=-0.04, Vega=-18
+   - All candidates satisfy: capital ≤ $15,000, POP_0 ≥ 60%, MaxLoss/capital ≤ 5%
+   - Runtime: 22 seconds (within <30s target)
+   - Diagnostics show: Stage 0 selected 4 expiries, Stage 1 retained 18 strikes, Stage 2 generated 847 structures, Stage 3 advanced 127 survivors to Stage 4
+
 2. **Given** user specifies trade_horizon=3, **When** optimizer runs, **Then** all metrics (E[PnL], POP, ROC) are computed over a 3-day holding period and horizon is clearly documented in output
+
+   **Concrete Example**:
+   ```bash
+   $ qse optimize-strategy --ticker TSLA --regime neutral --trade-horizon 3
+   ```
+   **Expected Output**:
+   - Top-10 trades ranked for 3-day horizon (72 trading hours)
+   - Rank #1: Short Strangle with E[PnL_3day]=$1,240 [CI: $1,080-$1,400], POP_0(3day)=81%, Theta_3day=+$82/day averaged
+   - Output clearly states: "Trade Horizon: 3 days (72 hours). All metrics computed over 3-day holding period."
+   - Option maturities at exit: Original DTE minus 3 days (e.g., 21 DTE → 18 DTE at horizon)
+
 3. **Given** user provides --override flags for config parameters, **When** optimizer runs, **Then** specified overrides (e.g., `--override "mc.num_paths=10000"`) take precedence over config.yml defaults
+
+   **Concrete Example**:
+   ```bash
+   $ qse optimize-strategy --ticker SPY --regime mild-bearish --trade-horizon 1 \
+     --override "mc.num_paths=10000" \
+     --override "filters.max_capital=20000" \
+     --override "scoring.w_pop=0.50"
+   ```
+   **Expected Output**:
+   - Monte Carlo runs with 10,000 paths (not default 5,000)
+   - Capital filter allows candidates up to $20,000 (not default $15,000)
+   - Composite scorer weights POP at 0.50 (not default 0.35), resulting in different Top-10 rankings favoring high-probability trades
+   - Diagnostics confirm: "Overrides applied: mc.num_paths=10000 (default: 5000), filters.max_capital=20000 (default: 15000), scoring.w_pop=0.50 (default: 0.35)"
+
 4. **Given** no candidates pass hard filters, **When** optimizer completes, **Then** system returns empty result with diagnostic summary explaining which filters rejected most candidates
+
+   **Concrete Example**:
+   ```bash
+   $ qse optimize-strategy --ticker AAPL --regime low-volatility --trade-horizon 1 \
+     --override "filters.min_epnl=2000" \
+     --override "filters.max_capital=5000"
+   ```
+   **Expected Output**:
+   - Empty Top-10 list (no candidates passed filters)
+   - Diagnostic summary: "Zero candidates passed hard filters. Rejection breakdown: 94% rejected by capital filter (>$5,000), 4% by E[PnL] filter (<$2,000), 2% by MaxLoss filter. Suggestion: Consider increasing max_capital to $10,000—78 additional candidates would qualify."
 
 ---
 
@@ -35,10 +82,69 @@ The optimizer must efficiently search thousands of potential option structures b
 **Acceptance Scenarios**:
 
 1. **Given** optimizer processes a stock with 15 tradeable strikes across 4 expiries, **When** Stage 0 runs, **Then** 3-5 expiries with DTE in [7, 45] days are selected
+
+   **Concrete Example**:
+   ```
+   Input: MSFT option chain with 15 strikes [$380, $385, ..., $450] and 4 expiries [7 DTE, 14 DTE, 21 DTE, 42 DTE]
+   Stage 0 Processing: Apply expiry selection rules from config (prefer DTE ∈ [7, 45], balance short/medium term)
+   Expected Output: Select 3 expiries: [7 DTE, 14 DTE, 21 DTE]. Exclude 42 DTE (exceeds 45-day preference for intraday spreads).
+   Diagnostic: "Stage 0: Selected 3 of 4 available expiries (7, 14, 21 DTE). Excluded: 42 DTE (out of preferred range)."
+   ```
+
 2. **Given** Stage 1 moneyness filters are applied, **When** filtering completes, **Then** only strikes with K/S0 in regime-appropriate band (e.g., [0.85, 1.15]) and meeting liquidity thresholds (volume ≥100, OI ≥100, bid-ask ≤15% of mid) are retained
+
+   **Concrete Example**:
+   ```
+   Input: S0=$400 (MSFT), 15 strikes [$380, $385, ..., $450], regime=neutral (moneyness band [0.85, 1.15])
+   Moneyness Filter: K/S0 ∈ [0.85, 1.15] → Retain strikes [$340-$460] → Keep 12 of 15 strikes
+   Liquidity Filter: Check volume, OI, bid-ask spread for 21 DTE expiry
+     - Strike $385: volume=250, OI=1200, bid-ask=3%, bid=$8.20, ask=$8.45 → PASS
+     - Strike $445: volume=45, OI=80, bid-ask=18% → FAIL (volume <100, spread >15%)
+   Expected Output: Retain 10 strikes meeting both moneyness and liquidity criteria
+   Diagnostic: "Stage 1: Retained 10 of 15 strikes. Rejected: 3 outside moneyness [0.85, 1.15], 2 failed liquidity (volume <100 or spread >15%)."
+   ```
+
 3. **Given** Stage 2 generates vertical spreads with width limits 1-3 strikes, **When** generation completes, **Then** candidate count is reduced from O(S²) to O(S·W) per side per expiry
+
+   **Concrete Example**:
+   ```
+   Input: 10 retained strikes per expiry, 3 expiries, width limits W=[1, 2, 3] strikes
+   Without Width Limits: O(S²) = 10² = 100 combinations per side × 2 sides × 3 expiries = 600 verticals
+   With Width Limits: O(S·W) = 10·3 = 30 combinations per side × 2 sides × 3 expiries = 180 verticals
+   Additional Structures: Generate Iron Condors (combining 2 verticals), straddles, strangles
+   Expected Output: Stage 2 generates 180 verticals + 120 Iron Condors + 30 straddles + 45 strangles = 375 total candidate structures
+   Diagnostic: "Stage 2: Generated 375 candidate structures (180 verticals, 120 Iron Condors, 30 straddles, 45 strangles) from 10 strikes × 3 expiries with width limits [1-3]."
+   ```
+
 4. **Given** Stage 3 applies cheap analytic prefiltering with hard filters (capital ≤$15k, MaxLoss/capital ≤5%, E[PnL]≥$500, POP≥60%), **When** filtering completes, **Then** top K=20-50 candidates per structure type advance to Stage 4, totaling 50-200 survivors
+
+   **Concrete Example**:
+   ```
+   Input: 375 candidate structures from Stage 2
+   Stage 3 Analytic Prefiltering (Black-Scholes with Normal distribution approximation):
+     - Capital Filter: 375 → 298 survivors (77 rejected, capital >$15,000)
+     - MaxLoss Filter: 298 → 265 survivors (33 rejected, MaxLoss/capital >5%)
+     - E[PnL] Filter: 265 → 189 survivors (76 rejected, E[PnL] <$500)
+     - POP Filter: 189 → 154 survivors (35 rejected, POP <60%)
+   Top-K Selection: Keep top 30 verticals, top 40 Iron Condors, top 20 straddles, top 15 strangles by simplified composite score
+   Expected Output: 105 candidates advance to Stage 4 (within 50-200 target range)
+   Diagnostic: "Stage 3: Filtered 375 → 154 survivors after hard filters. Selected top-105 for Stage 4 (30 verticals, 40 Iron Condors, 20 straddles, 15 strangles)."
+   ```
+
 5. **Given** Stage 4 receives survivors from Stage 3, **When** full MC scoring runs, **Then** GARCH-t/ML distribution engine with Bjerksund-Stensland pricer computes all metrics and ranks by composite intraday-spreads score
+
+   **Concrete Example**:
+   ```
+   Input: 105 survivors from Stage 3, regime=strong-bullish (mean_return=0.02, vol=0.03, skew=0.5)
+   Stage 4 Full Monte Carlo Scoring:
+     - Distribution: GARCH-t with regime parameters, 5,000 MC paths, 1-day horizon
+     - Pricer: Bjerksund-Stensland (American exercise), IV evolution mode = sticky-delta
+     - For each survivor: Compute E[PnL], CI, POP_0, POP_target, ROC, VaR, CVaR, Greeks
+     - Example: Iron Condor [$480/$485/$515/$520] → E[PnL]=$642±$62, POP_0=74%, ROC=4.2%, composite_score=0.78
+   Composite Scoring: Apply intraday-spreads scorer with weights [w_pop=0.35, w_roc=0.30, w_theta=0.10, penalties=0.25]
+   Expected Output: Top-10 ranked trades by composite score, Top-100 cached internally
+   Diagnostic: "Stage 4: Scored 105 candidates with full MC (5k paths, GARCH-t, Bjerksund-Stensland). Top-10 ranked, Top-100 cached. Runtime: 18 seconds."
+   ```
 
 ---
 
@@ -53,9 +159,88 @@ Users specify qualitative regime labels (neutral, strong-bullish, mild-bearish, 
 **Acceptance Scenarios**:
 
 1. **Given** config.yml defines 8 regime labels with distribution parameters, **When** user specifies --regime neutral, **Then** system loads mean_daily_return=0.0, daily_vol=0.01, skew=0.0, kurtosis_excess=1.0 for MC simulation
+
+   **Concrete Example**:
+   ```yaml
+   # config.yml excerpt
+   regimes:
+     neutral:
+       mode: table
+       mean_daily_return: 0.0
+       daily_vol: 0.01
+       skew: 0.0
+       kurtosis_excess: 1.0
+   ```
+   ```bash
+   $ qse optimize-strategy --ticker QQQ --regime neutral --trade-horizon 1
+   ```
+   **Expected Behavior**:
+   - System loads regime parameters: mean_daily_return=0.0, daily_vol=0.01 (1% daily volatility)
+   - GARCH-t distribution generator uses these parameters: zero drift, low volatility, no skew, moderate tail thickness
+   - MC paths exhibit neutral drift: E[S_1day] ≈ S_0, vol(S_1day) ≈ S_0 × 0.01
+   - Diagnostic: "Regime: neutral (table mode). Parameters: mean_daily_return=0.0, daily_vol=0.01, skew=0.0, kurtosis_excess=1.0. Source: config.yml."
+
 2. **Given** user specifies trade_horizon=3 with regime="strong-bullish" (mean=2%/day), **When** MC paths are generated, **Then** regime parameters compound across 3 days via multi-step simulation (not a single 6% jump)
+
+   **Concrete Example**:
+   ```yaml
+   # config.yml excerpt
+   regimes:
+     strong-bullish:
+       mean_daily_return: 0.02  # 2% per day
+       daily_vol: 0.03
+       skew: 0.5
+       kurtosis_excess: 2.0
+   ```
+   ```bash
+   $ qse optimize-strategy --ticker AMZN --regime strong-bullish --trade-horizon 3
+   ```
+   **Expected Behavior**:
+   - Multi-step simulation: S_0 → S_1 (day 1) → S_2 (day 2) → S_3 (day 3)
+   - Each step: S_{t+1} = S_t × exp(r_t), where r_t ~ GARCH-t(mean=0.02, vol=0.03, skew=0.5, kurt=2.0)
+   - Final distribution: E[S_3] ≈ S_0 × (1.02)³ ≈ S_0 × 1.061 (geometric compounding, not arithmetic 1.06)
+   - Path example: S_0=$400 → S_1=$408.20 (+2.05%) → S_2=$416.15 (+1.95%) → S_3=$425.80 (+2.32%) = +6.45% total
+   - NOT a single jump: S_0=$400 → S_3=$424 (+6% in one step) ✗ INCORRECT
+   - Diagnostic: "Trade horizon: 3 days. Regime parameters compounded via multi-step simulation (3 steps × 1-day bars). Final drift ≈ (1+0.02)³ - 1 = 6.12%."
+
 3. **Given** user sets regime_mode="calibrated", **When** optimizer initializes, **Then** system finds historical bars matching regime features (volatility quintile, trend state, VIX level), bootstraps return sequences, and generates MC paths from empirical distribution
+
+   **Concrete Example**:
+   ```yaml
+   # config.yml excerpt
+   regimes:
+     mild-bullish:
+       mode: calibrated
+       features:
+         vol_quintile: [2, 3]  # Middle volatility
+         trend_state: "uptrend"  # Positive 20-day MA slope
+         vix_range: [15, 25]
+   ```
+   ```bash
+   $ qse optimize-strategy --ticker NVDA --regime mild-bullish --trade-horizon 1
+   ```
+   **Expected Behavior**:
+   - System queries historical bar database (last 2 years) for NVDA
+   - Filter bars matching: vol_quintile ∈ [2,3], trend_state="uptrend", VIX ∈ [15,25]
+   - Find 247 matching days, extract 1-day log returns: [-0.012, +0.025, +0.018, -0.008, ...]
+   - Bootstrap sample: Randomly draw 5,000 paths from empirical return distribution (with replacement)
+   - MC paths reflect actual historical behavior in similar regime conditions
+   - Diagnostic: "Regime: mild-bullish (calibrated mode). Found 247 historical bars matching features. Bootstrapped 5,000 paths from empirical distribution."
+
 4. **Given** user provides explicit overrides --override "regime.mean_return=0.03" --override "regime.vol=0.04", **When** optimizer runs, **Then** explicit parameters take precedence over config table and calibration
+
+   **Concrete Example**:
+   ```bash
+   $ qse optimize-strategy --ticker SPY --regime strong-bullish --trade-horizon 1 \
+     --override "regime.mean_return=0.03" \
+     --override "regime.vol=0.04" \
+     --override "regime.skew=-0.2"
+   ```
+   **Expected Behavior**:
+   - Ignore config.yml strong-bullish entry (mean=0.02, vol=0.03, skew=0.5)
+   - Use explicit overrides: mean_return=0.03 (3% daily), vol=0.04 (4% daily), skew=-0.2 (left-skewed)
+   - GARCH-t distribution uses custom parameters for MC path generation
+   - Diagnostic: "Regime: strong-bullish (explicit mode). Overrides applied: mean_return=0.03 (config: 0.02), vol=0.04 (config: 0.03), skew=-0.2 (config: 0.5). Source: CLI overrides."
 
 ---
 
@@ -163,6 +348,123 @@ After selecting a trade, users can run continuous monitoring that periodically r
 - **Missing IV data for some strikes**: If Schwab API returns IV=null for certain strikes, system skips those strikes but continues: "Skipped 3 strikes due to missing IV data. Remaining: 12 usable strikes."
 
 - **Stale market data during live monitoring**: If market data feed is delayed >15 minutes during monitoring, system warns: "Stale data detected (last update: 18 min ago). Repricing may be inaccurate. Check market hours or data connection."
+
+---
+
+## Testing Strategy *(Constitution Principle XIX - Contract-Based Testing)*
+
+This section defines the testing approach required by Constitution Section II.XV to ensure TDD compliance and quality gates.
+
+### Unit Tests (pytest)
+
+**Scope**: Isolated component testing with mocked dependencies
+**Target Coverage**: ≥80% line coverage (FR-076), 100% critical path branch coverage (FR-077)
+
+**Components Requiring Unit Tests**:
+- **OptionPricer implementations**: Black-Scholes, Bjerksund-Stensland
+  - Test: price_option() returns values within theoretical bounds (0 ≤ call ≤ S, 0 ≤ put ≤ K·exp(-rT))
+  - Test: greeks() satisfy put-call parity, delta bounds [-1, 1]
+  - Test: Pricing convergence for standard ATM/ITM/OTM scenarios
+
+- **ReturnDistribution generators**: GARCH-t, Student-t, Laplacian, bootstrap
+  - Test: generate_paths() produces output shape (n_paths, n_steps) with valid price evolution
+  - Test: fit() + sample() workflow consistency with generate_paths()
+  - Test: Regime parameter compounding over multi-day horizons (H>1)
+
+- **StrategyScorer implementations**: intraday-spreads, future plugins
+  - Test: score() returns values in [0,1] range
+  - Test: Score monotonicity: higher POP increases score when w_pop > 0
+  - Test: Score decomposition components sum correctly
+
+- **Stage 1-3 filters**: Expiry selection, strike filtering, analytic prefiltering
+  - Test: Moneyness windows correctly filter strikes (K/S0 thresholds)
+  - Test: Liquidity thresholds (volume, OI, bid-ask spread) applied correctly
+  - Test: Hard filters (capital, MaxLoss, E[PnL], POP) reject violating candidates
+
+### Integration Tests
+
+**Scope**: Multi-component interaction testing with real data flows
+**Target**: Validate end-to-end Stage 0→4 pipeline, regime→distribution→pricing workflows
+
+**Critical Integration Tests**:
+- **Stage 0→4 multi-stage filtering pipeline**
+  - Given: Synthetic option chain with 1000+ candidate structures
+  - When: Pipeline executes Stage 0 (expiry) → Stage 1 (strike) → Stage 2 (structure) → Stage 3 (prefilter) → Stage 4 (MC scoring)
+  - Then: Survivor count reduces from ~1000 → 50-200, Top-10 ranked trades returned, runtime <30 seconds
+
+- **Regime→Distribution→Paths→Pricing→Scoring end-to-end flow**
+  - Given: regime="strong-bullish", ticker with known option chain, trade_horizon=1
+  - When: Full optimization executes
+  - Then: MC paths exhibit bullish bias (mean return ≈ regime.mean_daily_return), option prices consistent with paths, composite scores computed correctly
+
+- **Cost modeling integration**
+  - Given: Candidate Iron Condor with 4 legs
+  - When: Stage 3 prefilter and Stage 4 scoring run
+  - Then: Entry costs (spread + $0.65/contract × 4) subtracted from E[PnL], exit costs estimated, net P&L after costs reported
+
+### Property-Based Tests (hypothesis library)
+
+**Scope**: Invariant validation using randomized input generation
+**Target**: Mathematical properties that must hold universally
+
+**Properties to Validate**:
+- **Option pricing bounds**: ∀ S, K, T, r, σ: 0 ≤ call(S,K,T,r,σ) ≤ S and 0 ≤ put(S,K,T,r,σ) ≤ K·exp(-rT)
+- **Greeks relationships**: Put-call parity, delta bounds [-1, 1], gamma ≥ 0, vega ≥ 0
+- **Composite scoring monotonicity**: ∀ candidates with POP_a > POP_b and all else equal: score(a) ≥ score(b) when w_pop > 0
+- **Distribution generators**: ∀ n_paths, n_steps: paths.shape == (n_paths, n_steps) and np.all(paths > 0) and np.all(np.isfinite(paths))
+- **Stage filtering monotonicity**: ∀ stages S_i → S_{i+1}: candidate_count(S_{i+1}) ≤ candidate_count(S_i)
+
+### Contract Tests (pytest)
+
+**Scope**: Interface compliance validation for shared abstractions (FR-080)
+**Target**: Guarantee cross-feature compatibility (001-mvp-pipeline ↔ 009-option-optimizer)
+
+**Shared Interface Contracts**:
+- **OptionPricer interface**:
+  - Test: Black-Scholes and Bjerksund-Stensland produce identical results for European options within 1e-2 relative tolerance
+  - Test: All pricers implement price_option() and greeks() with consistent signatures
+  - Test: Pricing results deterministic for identical inputs (seed fixed)
+
+- **ReturnDistribution interface**:
+  - Test: All implementations support generate_paths(s0, trade_horizon, bars_per_day, regime_params, seed) → np.ndarray[n_paths, n_steps]
+  - Test: All implementations support fit(returns) + sample(n_paths, n_steps, seed) dual workflow
+  - Test: Output shapes consistent across implementations
+
+- **StrategyScorer interface**:
+  - Test: All implementations accept score(candidate, metrics, config) → float in [0,1]
+  - Test: Score deterministic for identical inputs
+  - Test: Custom plugins auto-discovered and validated
+
+### End-to-End (E2E) Tests
+
+**Scope**: Critical user path validation from CLI invocation to output
+**Target**: Ensure complete workflows function correctly (US1, US8)
+
+**E2E Test Scenarios**:
+- **US1: Single-command strategy optimization**
+  - Command: `qse optimize-strategy --ticker NVDA --regime strong-bullish --trade-horizon 1`
+  - Expected: Top-10 ranked trades with all metrics (E[PnL], CI, POP, ROC, Greeks, VaR/CVaR), leg-by-leg breakdowns, runtime <30 seconds
+  - Validation: Output JSON schema compliance, metric bounds checking, ranking order correctness
+
+- **US8: Live position monitoring**
+  - Command: `qse monitor --position iron_condor.json --interval 5min`
+  - Expected: Periodic repricing (every 5 min), PnL updates, alert trigger when profit target reached, exit order JSON generated
+  - Validation: Alert timing accuracy, repricing correctness, monitoring loop termination
+
+### Test Runtime Budget (FR-079)
+
+**Maximum Test Suite Duration**: <2 minutes for fast feedback loops
+
+**Budget Allocation**:
+- Unit tests: <30 seconds (fast, isolated, no I/O)
+- Integration tests: <60 seconds (synthetic data, in-memory processing)
+- Property-based tests: <20 seconds (limited example count for CI)
+- Contract tests: <5 seconds (deterministic comparisons)
+- E2E tests: <5 seconds (mocked Schwab API, cached data)
+
+**CI/CD Enforcement**: Tests exceeding runtime budget fail CI checks
+
+---
 
 ## Requirements *(mandatory)*
 
@@ -278,6 +580,21 @@ After selecting a trade, users can run continuous monitoring that periodically r
 
 - **FR-074**: System MUST include at least one synthetic reference test case (known option chain + regime -> expected Top-10 structure) to prevent regressions once stable candidate generator is ready
 - **FR-075**: System MUST log detailed diagnostics for each optimization run including: stage timings, candidate counts per stage, filter rejection breakdowns, MC convergence stats, scorer component contributions
+- **FR-076**: Test coverage MUST achieve ≥80% line coverage for qse/optimizers, qse/pricing, qse/distributions, qse/scorers modules (Constitution II.V, II.XV)
+- **FR-077**: Critical paths (Stage 0-4 filtering, MC scoring, composite scoring) MUST achieve 100% branch coverage (Constitution II.XV)
+- **FR-078**: Tests MUST be written before implementation for complex logic (pricing models, distribution generators, scoring functions) when feasible (Constitution II.XV)
+- **FR-079**: Test suite MUST complete in <2 minutes for fast feedback loops (Constitution II.XV)
+- **FR-080**: Contract tests MUST validate interface compliance (Constitution II.VIII, II.XV):
+  - OptionPricer: Black-Scholes and Bjerksund-Stensland produce identical results for European options within 1e-2 tolerance
+  - ReturnDistribution: All implementations support both generate_paths() and fit/sample workflows with consistent output shapes
+  - StrategyScorer: All implementations return scores in [0,1] range and maintain monotonicity (higher POP → higher score when w_pop > 0)
+  - Shared interfaces: 009-option-optimizer and 001-mvp-pipeline contract tests validate cross-feature compatibility
+- **FR-081**: Resilience tests MUST validate failure handling (Constitution II.IX):
+  - Stage 3 survivor overflow: If >300 candidates survive, system logs warning and applies stricter prefilter thresholds to reduce to <200
+  - Memory limit: System detects memory usage >18GB (per plan.md) and reduces path count or batch processes candidates
+  - API timeout: Schwab fetch timeout triggers retry with exponential backoff (3 attempts), then graceful failure with diagnostic
+  - Config validation: Malformed YAML raises clear parse error with line number, conflicting constraints trigger warning before search
+  - Stale data: Live monitoring warns if market data >15 min old (per edge case)
 
 ### Key Entities *(include if feature involves data)*
 

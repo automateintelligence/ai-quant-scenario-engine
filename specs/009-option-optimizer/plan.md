@@ -20,12 +20,21 @@ Option strategy optimizer that ingests option chains and a qualitative regime, f
 **Scale/Scope**: Single underlying per optimize run; batch mode sequential 10 tickers in <5 minutes (SC-012); cache Top-100 trades.
 
 ## Constitution Check
-- Specification-driven workflow: spec.md present; plan/tasks to align (Constitution II, XIX).
-- Quality gates: tests required (pytest/ruff), CI must fail on violations; confidence intervals + diagnostics (Section II.V, XIII, XV).
-- Security/Privacy: CLI/local data only; no PII; zero external auth (Section II.VI, VII) — NA but documented.
-- Observability: Structured diagnostics for stage counts, pricer fallbacks, MC variance, alerts (Section II.XIII, IX).
-- Deployment safety: not deploying services; CLI artifacts + config versioning only.
-- Gate status: PASS (no violations requiring complexity tracking).
+- **Specification-driven workflow**: spec.md present; plan/tasks to align (Constitution II, XIX). ✅ PASS
+- **Quality gates & TDD compliance**:
+  - Test coverage: FR-076 mandates ≥80% line coverage, FR-077 mandates 100% critical path branch coverage (Constitution II.V, II.XV)
+  - Test-first development: FR-078 requires tests before implementation for complex logic (Constitution II.XV)
+  - Test runtime: FR-079 enforces <2 minute test suite for fast feedback loops (Constitution II.XV)
+  - Contract testing: FR-080 validates interface compliance for OptionPricer, ReturnDistribution, StrategyScorer (Constitution II.VIII, II.XV)
+  - Property-based testing: Testing Strategy section defines invariant validation with hypothesis library (Constitution II.XIX)
+  - Resilience testing: FR-081 validates failure handling for overflow, memory limits, API timeouts (Constitution II.IX)
+  - CI enforcement: pytest/ruff required, CI must fail on violations
+  - Confidence intervals + diagnostics: FR-033, FR-075 (Constitution II.V, XIII, XV)
+  ✅ PASS
+- **Security/Privacy**: CLI/local data only; no PII; zero external auth (Constitution II.VI, VII) — NA but documented. ✅ PASS
+- **Observability**: Structured diagnostics for stage counts, pricer fallbacks, MC variance, alerts (Constitution II.XIII, IX). ✅ PASS
+- **Deployment safety**: not deploying services; CLI artifacts + config versioning only. ✅ PASS
+- **Gate status**: ✅ PASS (no violations requiring complexity tracking)
 
 ## Project Structure
 

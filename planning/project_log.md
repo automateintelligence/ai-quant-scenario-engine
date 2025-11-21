@@ -2768,3 +2768,67 @@ Git Workflow - Feature Branch Development
 
   That's it! Continue normal development with regular commits/pushes. Only rebase when
   you need to sync with main.
+
+# Summary of Changes
+
+  1. ✅ Updated 009 Specification Files
+
+  Files Modified:
+  - specs/009-option-optimizer/spec.md (line 286)
+  - specs/009-option-optimizer/data-model.md (lines 11-16, 47-51)
+  - specs/009-option-optimizer/checklists/requirements.md (lines 118, 225)
+
+  Changes:
+  - Replaced all 6 occurrences of DistributionEngine → ReturnDistribution
+  - Documented dual-workflow support (001: fit/sample, 009: generate_paths)
+  - Added cross-reference notes: "Shared with 001-mvp-pipeline"
+
+  2. ✅ Enhanced Shared Interfaces Package
+
+  Files Modified/Created:
+  - qse/interfaces/distribution.py - Added generate_paths() method for regime-driven
+  workflow
+  - qse/interfaces/pricing.py - Added greeks() method and Greeks dataclass
+  - qse/interfaces/option_leg.py - NEW - Harmonized option leg representation
+  - qse/interfaces/regime.py - NEW - 009 Regime entity
+  - qse/interfaces/__init__.py - Updated exports
+
+  Key Features:
+  - ReturnDistribution supports both workflows with clear docstrings
+  - OptionPricer includes greeks() for position Greek calculations
+  - OptionLeg harmonizes 001 single-leg and 009 multi-leg structures
+  - Regime encapsulates 009's regime-to-distribution mapping
+
+  3. ✅ Validated Specification Consistency
+
+  Validation Results:
+  - ✓ No remaining DistributionEngine references
+  - ✓ 7 correct ReturnDistribution references found
+  - ✓ greeks() method properly documented (FR-017, FR-031)
+  - ✓ Data model structure validated (11 entities, clear relationships)
+
+  Git Status
+
+  Commit: a5b4436 - "chore: Unify interface naming for 001/009 compatibility"
+
+  Files Changed: 8 files (6 modified, 2 created)
+  - Spec updates: 3 files
+  - Interface enhancements: 3 files
+  - New interfaces: 2 files
+
+  Next Steps
+
+  Your specifications are now ready for /speckit:tasks. The interface conflicts have
+  been resolved and both features can safely share:
+
+  1. ReturnDistribution - Unified distribution interface
+  2. OptionPricer - Shared pricing with greeks() support
+  3. OptionLeg - Harmonized option representation
+  4. Regime - 009-specific but future-proofed for 001 US7 Phase 2
+
+  You can now proceed with:
+  # From specs/009-option-optimizer/ directory
+  /speckit:tasks
+
+  The generated tasks will use the correct ReturnDistribution interface name and avoid
+  conflicts with 001-mvp-pipeline infrastructure.

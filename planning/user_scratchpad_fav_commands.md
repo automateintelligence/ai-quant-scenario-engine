@@ -1,0 +1,9 @@
+/sc:improve --type quality --type performance "1) I am interested in making sure the extraction and embedding APIs work, so that they could potentially be MCP tools for the LLM part of the RAG pipeline.  So, we are close to MVP for that in my mind when we fix these file format issues.
+2) I am mostly concerned with a robust document ingestion pipeline that runs on the KS-001 server using the ingestion service.  My understanding is that system does not use the API services at all, it will call the embedding and extraction services locally. So, getting the APIs working is good but we also have the parallel and perhaps more important goal of making the extraction and embedding service robust and fast. What can we do to make the current system more robust and faster? Am I correct in assuming that running extraction and embedding locally rather than through the API will be significantly faster? We want the src/api/ingestion.py service to be able to run batch processing on a que of files after they have been saved to the Cloudflare R2 object store.
+3) There are *a lot* more than 6 failed and 4 unsupported documents from this test.  We removed the fallback extraction of the base64 binary, so we just raise an exception now.  But we still need to address why we are getting many, many "Extraction attempt 3/3 failed" for various document types. Could it be that we are exceeding any arbitrary user limits in our settings or .env?"
+
+  
+  
+/compact "Please remove unrelated discussion, earlier brainstorming, and obsolete ideas,
+but keep all specifications, constraints, and interface definitions required for correct
+implementation."
