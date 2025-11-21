@@ -15,6 +15,12 @@ Parent: `plan.md` (spec-driven). Used by contracts and quickstart examples.
 - **Implementations**: garch_t, student_t, laplacian, bootstrap (regime-conditioned), ml_conditional (future).
 - **Validation**: Seeds required for reproducibility; cap `n_paths` to `max_paths` (default 20k); record variance stats for CI.
 
+### DataSource
+- **Fields**: `name` (enum: schwab, yfinance), `symbols` (list[str]), `start` (date), `end` (date), `interval` (enum: 1d, 5m, 1m), `source_version` (str), `path` (abs path to Parquet partition), `capabilities` (quotes, ohlcv, option_chain, fundamentals, analyst_info, market_data), `auth` (token/secret refs), `fallback` (bool to allow yfinance), `rate_limits` (struct with throttle/backoff).
+- **Defaults**: `name=schwab` when creds present else `yfinance`; `interval=1d`; `fallback=true` when Schwab unavailable.
+- **Validation**: Must provide OHLCV columns; option_chain requires bid/ask/IV/OI/volume; fundamentals/analyst_info optional; interval must match requested frequency; warn and fallback to yfinance when schwab capability missing or errors (spec FR-004/FR-005, Edge cases).
+- **Relationships**: Supplies data for `ReturnDistribution` and `CandidateSelector`; option_chain feeds `CandidateStructure`; fundamentals/analyst_info may feed features for scoring/filters.
+
 ### OptionPricer
 - **Interface**: `price_option(underlying, strike, maturity, rate, dividend, iv_state, type)`; `greeks(...)`.
 - **Implementations**: bjerksund_stensland (default), black_scholes (fallback), heston (advanced), slv/svi (future).
