@@ -33,7 +33,7 @@ def monitor(
         None, "--config", help="Optional config.yml/json to load regimes + mc settings"
     ),
     iterations: Optional[int] = typer.Option(
-        1,
+        None,
         "--iterations",
         help="Number of monitoring iterations (<=0 runs until alert)",
     ),
