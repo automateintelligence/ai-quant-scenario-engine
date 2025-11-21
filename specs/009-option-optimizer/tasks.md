@@ -32,9 +32,9 @@
 **Goal**: Optimize and return Top-10 strategies from ticker+regime+horizon (full universe may take up to 1 hour).
 **Independent Test**: Re-evaluate an existing Top-10 list with fresh market data in <30s via `qse optimize-strategy --ticker NVDA --regime strong-bullish --trade-horizon 1 --retest top10.json` (spec FR-061 adjusted).
 
-- [ ] T011 [US1] Connect CLI optimize-strategy to new data provider selection (schwab primary, yfinance fallback) in `src/qse/cli/commands/optimize.py` (spec FR-001/FR-004/FR-059)
-- [ ] T012 [P] [US1] Ensure overrides flow (mc.*, filters.*, scoring.*) from CLI to config application in `src/qse/config/loader.py` (spec FR-003/FR-058)
-- [ ] T013 [US1] Emit Top-10/Top-100 artifacts and diagnostics per spec and retest path (<30s) in `src/qse/optimizers/strategy_optimizer.py` (spec FR-048–FR-055, FR-061)
+- [X] T011 [US1] Connect CLI optimize-strategy to new data provider selection (schwab primary, yfinance fallback) in `src/qse/cli/commands/optimize.py` (spec FR-001/FR-004/FR-059)
+- [X] T012 [P] [US1] Ensure overrides flow (mc.*, filters.*, scoring.*) from CLI to config application in `src/qse/config/loader.py` (spec FR-003/FR-058)
+- [X] T013 [US1] Emit Top-10/Top-100 artifacts and diagnostics per spec and retest path (<30s) in `src/qse/optimizers/strategy_optimizer.py` (spec FR-048–FR-055, FR-061)
 
 ---
 
