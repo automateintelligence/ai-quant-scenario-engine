@@ -115,7 +115,7 @@
   - **Extensibility Criteria**: SC-011 (plugin architecture), SC-005 (scorer configurability)
 
 - [x] No implementation details leak into specification
-  - **Verification**: All references use abstract interfaces (OptionPricer, DistributionEngine, StrategyScorer) rather than concrete classes
+  - **Verification**: All references use abstract interfaces (OptionPricer, ReturnDistribution, StrategyScorer) rather than concrete classes
   - **Examples**: "bilinear interpolation" (mathematical concept) vs specific library functions, "config.yml" (format) vs parsing implementation
 
 ## Validation Summary
@@ -220,9 +220,9 @@
 ## Notes
 
 - **Specification Source**: Draws from comprehensive planning document (`planning/Option_Spead_Candiate_Optimizer.md`) with 11 discovery questions fully answered
-- **Integration Strategy**: Clear integration points with US1 (stock-vs-option comparison) through shared OptionPricer interface (FR-071), distribution models (FR-072), and config.yml (FR-073)
+- **Integration Strategy**: Clear integration points with US1 (stock-vs-option comparison) through shared OptionPricer interface (FR-071), ReturnDistribution models (FR-072), and config.yml (FR-073)
 - **Architectural Foundation**: Multi-stage filtering architecture (Stage 0-4, US2) provides computational tractability for <30 second runtime targets (SC-001, FR-061)
-- **Extensibility**: Pluggable architecture (OptionPricer, DistributionEngine, StrategyScorer) enables future enhancements without core code changes (SC-011, FR-017, FR-034, FR-040)
+- **Extensibility**: Pluggable architecture (OptionPricer, ReturnDistribution, StrategyScorer) enables future enhancements without core code changes (SC-011, FR-017, FR-034, FR-040)
 - **Edge Case Coverage**: All 9 edge cases derived from Q&A answers (Q5.1-Q5.3) and practical implementation considerations
 - **Success Criteria Balance**: Quantitative metrics (runtime <30s, filtering 1000→200, batch 10 tickers in 5min) balanced with qualitative outcomes (user learning from diagnostics, scorer extensibility)
 - **Risk Mitigation**: Fallback pricing logic (FR-021, FR-022), adaptive MC paths (FR-032), diagnostic hints (FR-055) address common failure modes

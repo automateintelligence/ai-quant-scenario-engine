@@ -8,8 +8,10 @@ Parent: `plan.md` (spec-driven). Used by contracts and quickstart examples.
 - **Fields**: `label` (enum: neutral, strong-neutral, low-volatility, volatility-dir-uncertain, mild-bearish, strong-bearish, mild-bullish, strong-bullish), `mode` (table|calibrated|explicit), `mean_daily_return` (float), `daily_vol` (float), `skew` (float), `kurtosis_excess` (float), `source` (config|calibrated|override).
 - **Validation**: Unknown labels error; explicit overrides take precedence; multi-day horizons compound daily params.
 
-### DistributionEngine
-- **Interface**: `generate_paths(s0, trade_horizon, bars_per_day, regime_params, seed) -> np.ndarray[n_paths, n_steps]`.
+### ReturnDistribution
+- **Interface**: Shared with 001-mvp-pipeline. Supports two workflows:
+  - **009 workflow** (regime-driven): `generate_paths(s0, trade_horizon, bars_per_day, regime_params, seed) -> np.ndarray[n_paths, n_steps]`
+  - **001 workflow** (historical fit): `fit(returns) -> None`, `sample(n_paths, n_steps) -> np.ndarray` (not used in 009)
 - **Implementations**: garch_t, student_t, laplacian, bootstrap (regime-conditioned), ml_conditional (future).
 - **Validation**: Seeds required for reproducibility; cap `n_paths` to `max_paths` (default 20k); record variance stats for CI.
 
@@ -44,9 +46,9 @@ Parent: `plan.md` (spec-driven). Used by contracts and quickstart examples.
 - **Validation**: Diagnostics must include filter rejection breakdown and pricer failures; runtime recorded for SC-001/SC-012 checks.
 
 ## Relationships
-- Regime → DistributionEngine → paths → OptionPricer valuations → Metrics → StrategyScorer → Ranking.
+- Regime → ReturnDistribution → paths → OptionPricer valuations → Metrics → StrategyScorer → Ranking.
 - CandidateStructure generated from option chain + filters; Metrics attach to CandidateStructure; RunArtifacts cache ordered outputs.
-- Position uses CandidateStructure + updated market data for monitoring; reuses OptionPricer and DistributionEngine for remaining horizon paths.
+- Position uses CandidateStructure + updated market data for monitoring; reuses OptionPricer and ReturnDistribution for remaining horizon paths.
 
 ## State & Lifecycle
 1. Load option chain (Schwab API) and config/regime.
