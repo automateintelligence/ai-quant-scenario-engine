@@ -43,11 +43,11 @@
 **Goal**: Stage 0-4 filtering reduces thousands to 50–200 MC survivors; full sweep can run up to 1 hour; cached Top-10 retests <30s.
 **Independent Test**: Synthetic chain run logs stage counts and runtime; retest path meets <30s.
 
-- [ ] T014 [P] [US2] Implement Stage 0 expiry selection (3–5 expiries in [7,45] DTE) in `src/qse/optimizers/candidate_filter.py` (spec FR-006)
-- [ ] T015 [P] [US2] Implement Stage 1 moneyness/liquidity strike filters with config thresholds in `src/qse/optimizers/candidate_filter.py` (spec FR-007)
-- [ ] T016 [US2] Implement Stage 2 structure generation (verticals width 1–3, iron condors, straddles/strangles) in `src/qse/optimizers/candidate_generator.py` (spec FR-008)
-- [ ] T017 [US2] Implement Stage 3 analytic prefilter + hard constraints + top-K per structure in `src/qse/optimizers/prefilter.py` (spec FR-009–FR-011)
-- [ ] T018 [US2] Integrate Stage 4 MC scoring trigger for survivors in `src/qse/optimizers/strategy_optimizer.py` (spec FR-012)
+- [X] T014 [P] [US2] Implement Stage 0 expiry selection (3–5 expiries in [7,45] DTE) in `src/qse/optimizers/candidate_filter.py` (spec FR-006)
+- [X] T015 [P] [US2] Implement Stage 1 moneyness/liquidity strike filters with config thresholds in `src/qse/optimizers/candidate_filter.py` (spec FR-007)
+- [X] T016 [US2] Implement Stage 2 structure generation (verticals width 1–3, iron condors, straddles/strangles) in `src/qse/optimizers/candidate_generator.py` (spec FR-008)
+- [X] T017 [US2] Implement Stage 3 analytic prefilter + hard constraints + top-K per structure in `src/qse/optimizers/prefilter.py` (spec FR-009–FR-011)
+- [X] T018 [US2] Integrate Stage 4 MC scoring trigger for survivors in `src/qse/optimizers/strategy_optimizer.py` (spec FR-012)
 
 ---
 
