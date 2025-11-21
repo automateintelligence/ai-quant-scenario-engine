@@ -43,3 +43,23 @@ def validate_compare_inputs(
 def validate_screen_inputs(*, horizon: int, max_workers: int) -> None:
     require_positive("horizon", horizon)
     require_positive("max_workers", max_workers)
+
+
+def validate_grid_inputs(
+    *,
+    paths: int,
+    steps: int,
+    seed: int | None,
+    grid: object,
+    max_workers: int | None = None,
+) -> None:
+    require_positive("paths", paths)
+    require_positive("steps", steps)
+    if seed is None:
+        raise ConfigValidationError("seed is required for reproducibility")
+    if grid is None:
+        raise ConfigValidationError("grid definitions are required")
+    if isinstance(grid, list) and len(grid) == 0:
+        raise ConfigValidationError("grid definitions are required")
+    if max_workers is not None and max_workers <= 0:
+        raise ConfigValidationError("max_workers must be > 0")

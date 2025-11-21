@@ -44,33 +44,58 @@ specs/001-mvp-pipeline/
 └── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
-### Source Code (repository root)
+### Project Structure
 
 ```text
-qse/
-├── data/                   # data source adapters (yfinance, Schwab API, PyData loaders)
-├── features/               # indicator + macro enrichment
-├── schema/
-├── models/
-├── interfaces/
-├── runs/
-├── qse/
-|   ├── distributions/      # fit/sample abstractions for Normal/Laplace/Student-T/GARCH
-|   └── mc/                 # Monte Carlo generators + memmap/npz persistence helpers
-├── optimizer/
-├── pricing/                # option pricers (Black-Scholes default; alt pricers Heston, TBD)
-├── strategies/             # stock + option strategies, param schemas
-├── simulation/             # core simulator, grid runner, conditional episode logic
-├── cli/                    # typer entrypoints for compare, grid, screening
-├── config/
-|     main.py
+quant-scenario-engine/          # Project root
+├── qse/                        # Python module (import qse.*)
+│   ├── analysis/
+│   ├── backtesting/
+│   ├── cli/                    # Typer entrypoints (compare, grid, screening)
+│   │   ├── commands/
+│   │   └── formatters/
+│   ├── config/
+│   ├── data/                   # CODE: data source adapters (yfinance, Schwab API, loaders)
+│   ├── distributions/          # Fit/sample abstractions for distributions
+│   │   ├── backtesting/
+│   │   ├── cache/
+│   │   ├── diagnostics/
+│   │   ├── fitters/
+│   │   ├── metrics/
+│   │   ├── plotting/
+│   │   ├── selection/
+│   │   └── validation/
+│   ├── features/               # CODE: indicator + macro enrichment logic
+│   ├── interfaces/
+│   ├── mc/                     # Monte Carlo generators + persistence helpers
+│   ├── models/
+│   ├── optimizer/
+│   ├── pricing/                # Option pricers (Black-Scholes, Heston)
+│   ├── runs/
+│   ├── schema/
+│   ├── selectors/
+│   ├── simulation/             # Core simulator, grid runner, conditional episodes
+│   ├── strategies/             # Stock + option strategies, param schemas
+│   └── utils/
+├── data/                       # DATA ARTIFACTS: actual files (not code)
+│   ├── features/               # Computed features cache
+│   ├── historical/             # Price data from yfinance
+│   │   └── interval=1d/
+│   └── universes/              # Stock universe definitions
+├── runs/                       # Simulation outputs, results artifacts
+├── output/                     # Diagnostic output of modules like distribution_audit.py
 ├── tests/
-    ├── unit/
-    ├── integration/        # CLI + data/pricer wiring + persistence paths
-    └── contract/           # CLI/config/schema/contracts
+│   ├── unit/
+│   ├── integration/            # CLI + data/pricer wiring + persistence paths
+│   └── contract/               # CLI/config/schema/contracts
+├── scripts/                    # Utility scripts, benchmarks
+│   └── benchmarks/
+├── specs/                      # Specifications and documentation
+│   └── 001-mvp-pipeline/
+└── planning/                   # Design documents
 ```
 
-**Structure Decision**: Single-package layout rooted in `qse/`; keeps CLI + engine co-located for fast iteration while preserving clear submodules for data, backtesting, MC, pricers, strategies, and simulations.
+**Structure Decision**: Single-package layout with `qse/` module; keeps CLI + engine co-located for fast iteration while preserving clear submodules. Note the intentional separation: `qse/data/` contains Python code for data adapters, while `data/` at project root contains actual data artifacts (historical prices, features). This separation keeps code and data concerns cleanly separated.
 
 ## Complexity Tracking
 

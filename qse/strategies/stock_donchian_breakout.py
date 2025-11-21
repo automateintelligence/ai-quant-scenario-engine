@@ -73,9 +73,7 @@ class StockDonchianBreakoutStrategy(Strategy):
         signals_stock = raw_direction * shares_per_path[:, None].astype(np.int32)
         signals_option = np.zeros_like(signals_stock, dtype=np.int32)
 
-        features_used = []
-        if isinstance(features, dict):
-            features_used = list(features.keys())
+        features_used: list[str] = []
 
         return StrategySignals(
             signals_stock=signals_stock,

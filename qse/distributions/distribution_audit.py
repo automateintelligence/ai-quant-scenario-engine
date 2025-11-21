@@ -31,12 +31,20 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
 
+from qse.distributions.backtesting.breach_counter import count_breaches
+from qse.distributions.backtesting.christoffersen_test import christoffersen_pvalue
+from qse.distributions.backtesting.data_split import train_test_split
+from qse.distributions.backtesting.kupiec_test import kupiec_pvalue
+from qse.distributions.backtesting.var_predictor import predict_var_from_samples
+from qse.distributions.cache.cache_manager import get_cache_path, is_fresh, load_cache, save_cache, TTL_DAYS
+from qse.distributions.cache.serializer import deserialize_payload, serialize_payload
 from qse.distributions.diagnostics.tail_report import build_tail_report
+from qse.distributions.diagnostics.tail_metrics import tail_error
 from qse.distributions.errors import (
     handle_insufficient_data,
     has_minimum_samples,
@@ -45,23 +53,18 @@ from qse.distributions.errors import (
 from qse.distributions.fitters.garch_t_fitter import GarchTFitter
 from qse.distributions.fitters.laplace_fitter import LaplaceFitter
 from qse.distributions.fitters.student_t_fitter import StudentTFitter
+from qse.distributions.integration.cache_checker import warn_if_stale
 from qse.distributions.metrics.information_criteria import aic as calc_aic, bic as calc_bic
-from qse.distributions.metrics.model_ranking import rank_by_information_criteria
 from qse.distributions.models import FitResult
-from qse.distributions.selection.model_selector import select_model
 from qse.distributions.selection.selection_report import build_selection_report
 from qse.distributions.selection.scorer import composite_score
-from qse.distributions.selection.normalize import normalize_aic
-from qse.distributions.validation.realism_report import build_realism_report
-from qse.distributions.validation.historical_metrics import compute_historical_metrics
-from qse.distributions.validation.mc_path_generator import generate_paths
-from qse.distributions.validation.volatility_calc import annualized_volatility
 from qse.distributions.validation.clustering_calc import autocorr_squared_returns
+from qse.distributions.validation.drawdown_calc import max_drawdown
 from qse.distributions.validation.extreme_moves import extreme_move_frequencies
+from qse.distributions.validation.historical_metrics import compute_historical_metrics
+from qse.distributions.validation.realism_report import build_realism_report
+from qse.distributions.validation.volatility_calc import annualized_volatility
 from qse.distributions.validation.stationarity import MIN_SAMPLES
-from qse.distributions.integration.cache_checker import warn_if_stale
-from qse.distributions.cache.cache_manager import get_cache_path, is_fresh, load_cache, save_cache, TTL_DAYS
-from qse.distributions.cache.serializer import deserialize_payload, serialize_payload
 from qse.exceptions import DistributionFitError
 from qse.interfaces.distribution import ReturnDistribution
 from qse.utils.logging import get_logger
@@ -84,21 +87,18 @@ class ModelSpec:
 
 @dataclass
 class TailMetrics:
-    """
-    Tail-focused diagnostics for empirical vs model-implied returns.
+    """Tail-focused diagnostics for empirical vs model-implied returns."""
 
-    TODO [T146, AS3 - scheduled]:
-    - Track 99.5% quantiles alongside 95%/99% so tail_report can expose VaR_99.5 deltas.
-    - Populate ``tail_error_995`` with normalized |model-empirical| and feed into selection scoring.
-    - When implemented, ensure `tail_report.py` consumes the extra fields for plotting and summary text.
-    """
     model_name: str
     var_emp_95: float
     var_emp_99: float
+    var_emp_995: float
     var_model_95: float
     var_model_99: float
+    var_model_995: float
     tail_error_95: float
     tail_error_99: float
+    tail_error_995: float
 
 
 @dataclass
@@ -151,6 +151,15 @@ class DistributionAuditResult:
     tail_reports: Dict[str, dict] = field(default_factory=dict)
     realism_reports: Dict[str, dict] = field(default_factory=dict)
     selection_report: Dict[str, object] = field(default_factory=dict)
+
+
+def _derive_seed(base_seed: int | None, model_name: str, stage: str) -> Optional[int]:
+    """Derive a deterministic seed per model/stage from the base seed."""
+
+    if base_seed is None:
+        return None
+    mix = sum(ord(ch) for ch in f"{model_name}:{stage}")
+    return int((base_seed * 31 + mix) % (2**31 - 1))
 
 
 def _rehydrate_model_spec(raw: ModelSpec | dict | None) -> Optional[ModelSpec]:
@@ -263,10 +272,12 @@ def fit_candidate_models(
 def compute_tail_metrics(
     returns: np.ndarray,
     fitted_models: Sequence[ModelSpec],
-    levels: Sequence[float] = (0.95, 0.99),
+    fit_results: Sequence[FitResult],
+    levels: Sequence[float] = (0.95, 0.99, 0.995),
     mc_paths: int = 50_000,
     mc_steps: int = 1,
-) -> List[TailMetrics]:
+    seed: int | None = None,
+) -> Tuple[List[TailMetrics], Dict[str, np.ndarray]]:
     """
     Compare empirical tail quantiles to model-implied tail quantiles using
     Monte Carlo or closed-form quantiles where available.
@@ -280,51 +291,58 @@ def compute_tail_metrics(
       and CLI output (per US6a AS3 acceptance scenarios).
     """
     tail_results: List[TailMetrics] = []
+    samples_by_model: Dict[str, np.ndarray] = {}
+    fit_success = {fr.model_name: fr.fit_success for fr in fit_results}
 
     # Empirical quantiles
-    emp_q = {
-        lvl: np.quantile(returns, 1.0 - lvl)  # for losses in right tail; adjust convention as needed
-        for lvl in levels
-    }
+    emp_q = {lvl: np.quantile(returns, 1.0 - lvl) for lvl in levels}
 
     for spec in fitted_models:
+        if not fit_success.get(spec.name, False):
+            continue
+
         try:
-            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
-            # For simplicity, approximate tail quantiles via simulation of one-step returns
-            simulated = fitter.sample(n_paths=mc_paths, n_steps=mc_steps).reshape(-1)  # type: ignore[attr-defined]
+            fitter = spec.cls if hasattr(spec.cls, "sample") else spec.cls()
+            draw_seed = _derive_seed(seed, spec.name, "tail")
+            simulated = fitter.sample(n_paths=mc_paths, n_steps=mc_steps, seed=draw_seed).reshape(-1)  # type: ignore[attr-defined]
+            samples_by_model[spec.name] = simulated
+            errors = tail_error(returns, simulated, levels=levels)
 
-            var_model_95 = np.quantile(simulated, 1.0 - 0.95)
-            var_model_99 = np.quantile(simulated, 1.0 - 0.99)
+            def _metric(level: float, key: str) -> Tuple[float, float, float]:
+                entry = errors.get(key)
+                if not entry:
+                    return emp_q[level], float(np.nan), float("inf")
+                return entry["empirical"], entry["model"], entry["relative_error"]
 
-            var_emp_95 = emp_q[0.95]
-            var_emp_99 = emp_q[0.99]
-
-            def tail_err(emp: float, mod: float) -> float:
-                if emp == 0:
-                    return 0.0
-                return abs(mod - emp) / (abs(emp) + 1e-12)
+            emp_95, model_95, err_95 = _metric(0.95, "var_95.0")
+            emp_99, model_99, err_99 = _metric(0.99, "var_99.0")
+            emp_995, model_995, err_995 = _metric(0.995, "var_99.5")
 
             tail_results.append(
                 TailMetrics(
                     model_name=spec.name,
-                    var_emp_95=var_emp_95,
-                    var_emp_99=var_emp_99,
-                    var_model_95=var_model_95,
-                    var_model_99=var_model_99,
-                    tail_error_95=tail_err(var_emp_95, var_model_95),
-                    tail_error_99=tail_err(var_emp_99, var_model_99),
+                    var_emp_95=emp_95,
+                    var_emp_99=emp_99,
+                    var_emp_995=emp_995,
+                    var_model_95=model_95,
+                    var_model_99=model_99,
+                    var_model_995=model_995,
+                    tail_error_95=err_95,
+                    tail_error_99=err_99,
+                    tail_error_995=err_995,
                 )
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("tail metric calculation failed", extra={"model": spec.name, "error": str(exc)})
 
-    return tail_results
+    return tail_results, samples_by_model
 
 
 def run_var_backtests(
-    returns_train: np.ndarray,
     returns_test: np.ndarray,
     fitted_models: Sequence[ModelSpec],
+    fit_results: Sequence[FitResult],
+    samples_by_model: Dict[str, np.ndarray],
     levels: Sequence[float] = (0.95, 0.99),
 ) -> List[VarBacktestResult]:
     """
@@ -340,33 +358,25 @@ def run_var_backtests(
     - Enforce FR requirement: audit must mark catastrophic failure when **both** tests return ``p < 0.01``.
     """
     results: List[VarBacktestResult] = []
+    fit_success = {fr.model_name: fr.fit_success for fr in fit_results}
 
     for spec in fitted_models:
+        if not fit_success.get(spec.name, False):
+            continue
+
+        sample = samples_by_model.get(spec.name)
+        if sample is None or sample.size == 0:
+            continue
+
         try:
-            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
-
             for level in levels:
-                # TODO [T153 - scheduled]: Implement proper one-step-ahead forecast logic per model
-                # Current implementation uses static VaR - needs dynamic forecast!
-
-                # Placeholder: assume static VaR from train distribution
-                simulated = fitter.sample(n_paths=100_000, n_steps=1).reshape(-1)  # type: ignore[attr-defined]
-                var_level = np.quantile(simulated, 1.0 - level)
-
-                breaches = returns_test < var_level
-                n_breaches = int(breaches.sum())
+                var_level = predict_var_from_samples(sample, level)
+                n_breaches, breach_sequence = count_breaches(returns_test, var_level)
                 n_obs = len(returns_test)
                 expected_breaches = (1.0 - level) * n_obs
-
-                # TODO [T151 - scheduled]: Implement Kupiec test with proper likelihood ratio statistic
-                kupiec_pvalue = 1.0  # placeholder
-
-                # TODO [T152 - scheduled]: Implement Christoffersen test with transition matrix
-                christoffersen_pvalue = 1.0  # placeholder
-
-                # TODO [T155 - scheduled]: Apply proper pass/fail logic based on p-values
-                # Pass if p ≥ 0.01 on at least one test (not both < 0.01)
-                passed = True  # placeholder
+                kupiec = kupiec_pvalue(n_obs, n_breaches, level)
+                christ = christoffersen_pvalue(breach_sequence)
+                passed = kupiec >= 0.05 and christ >= 0.05
 
                 results.append(
                     VarBacktestResult(
@@ -375,8 +385,8 @@ def run_var_backtests(
                         n_obs=n_obs,
                         n_breaches=n_breaches,
                         expected_breaches=expected_breaches,
-                        kupiec_pvalue=kupiec_pvalue,
-                        christoffersen_pvalue=christoffersen_pvalue,
+                        kupiec_pvalue=kupiec,
+                        christoffersen_pvalue=christ,
                         passed=passed,
                     )
                 )
@@ -390,9 +400,12 @@ def simulate_paths_and_metrics(
     symbol: str,
     s0: float,
     fitted_models: Sequence[ModelSpec],
+    fit_results: Sequence[FitResult],
+    hist_metrics: dict,
     paths: int = 10_000,
     steps: int = 252,
-) -> List[SimulationMetrics]:
+    seed: int | None = None,
+) -> Tuple[List[SimulationMetrics], Dict[str, dict]]:
     """
     Use each model to generate Monte Carlo paths and compute high-level
     realism metrics: volatility, clustering, drawdowns, extreme-move frequency.
@@ -416,56 +429,51 @@ def simulate_paths_and_metrics(
             Include visual diagnostics for interpretation
     """
     sim_results: List[SimulationMetrics] = []
+    realism_reports: Dict[str, dict] = {}
+    fit_success = {fr.model_name: fr.fit_success for fr in fit_results}
+
+    hist_vol = hist_metrics.get("annualized_vol", 0.0)
+    hist_acf = hist_metrics.get("acf_sq_lag1", 0.0)
 
     for spec in fitted_models:
+        if not fit_success.get(spec.name, False):
+            continue
         try:
-            fitter = spec.cls if isinstance(spec.cls, object) else spec.cls()
-            r = fitter.sample(n_paths=paths, n_steps=steps)  # type: ignore[attr-defined]
-            # Price paths
-            log_s0 = np.log(max(s0, 1e-9))
-            log_s = log_s0 + np.cumsum(r, axis=1)
-            log_s = np.clip(log_s, -50, 50)  # prevent overflow
-            prices = np.exp(log_s)
-            prices = np.clip(prices, 1e-8, None)
+            fitter = spec.cls if hasattr(spec.cls, "sample") else spec.cls()
+            draw_seed = _derive_seed(seed, spec.name, "sim")
+            returns = fitter.sample(n_paths=paths, n_steps=steps, seed=draw_seed)  # type: ignore[attr-defined]
+            price_paths = np.exp(np.log(max(s0, 1e-9)) + np.cumsum(returns, axis=1))
+            price_paths = np.clip(price_paths, 1e-8, None)
 
-            # Daily returns on prices for metrics
-            px = prices
-            ret = np.diff(px, axis=1) / px[:, :-1]
+            returns_flat = returns.reshape(-1)
+            sim_vol = annualized_volatility(returns_flat)
+            sim_acf = autocorr_squared_returns(returns_flat, lag=1)
+            drawdowns = [max_drawdown(path) for path in price_paths]
+            mean_max_dd = float(np.mean(drawdowns))
+            extremes = extreme_move_frequencies(returns_flat)
 
-            annualized_vol = np.std(ret, axis=1, ddof=1) * np.sqrt(252.0)
-            mean_annual_vol = float(np.mean(annualized_vol))
-
-            # Volatility clustering: ACF of squared returns at lag 1
-            sq = ret ** 2
-            sq_mean = sq.mean(axis=1, keepdims=True)
-            num = np.mean((sq[:, 1:] - sq_mean) * (sq[:, :-1] - sq_mean), axis=1)
-            den = np.mean((sq - sq_mean) ** 2, axis=1)
-            acf1 = float(np.mean(num / (den + 1e-12)))
-
-            # Max drawdown per path
-            roll_max = np.maximum.accumulate(px, axis=1)
-            dd = (px - roll_max) / roll_max
-            max_dd = dd.min(axis=1)
-            mean_max_dd = float(np.mean(max_dd))
-
-            # Extreme move frequencies
-            freq_3pct = float(np.mean(np.any(ret <= -0.03, axis=1)))
-            freq_5pct = float(np.mean(np.any(ret <= -0.05, axis=1)))
+            sim_detail = {
+                "annualized_vol": sim_vol,
+                "acf_sq_lag1": sim_acf,
+                "max_drawdown": mean_max_dd,
+                "extremes": extremes,
+            }
+            realism_reports[spec.name] = build_realism_report(sim_detail, hist_metrics)
 
             sim_results.append(
                 SimulationMetrics(
                     model_name=spec.name,
-                    mean_annualized_vol=mean_annual_vol,
-                    acf_sq_returns_lag1=acf1,
+                    mean_annualized_vol=sim_vol,
+                    acf_sq_returns_lag1=sim_acf,
                     mean_max_drawdown=mean_max_dd,
-                    freq_gt_3pct_move=freq_3pct,
-                    freq_gt_5pct_move=freq_5pct,
+                    freq_gt_3pct_move=extremes.get("gt_3pct", 0.0),
+                    freq_gt_5pct_move=extremes.get("gt_5pct", 0.0),
                 )
             )
         except Exception as exc:  # noqa: BLE001
             log.warning("simulation metrics failed", extra={"model": spec.name, "error": str(exc)})
 
-    return sim_results
+    return sim_results, realism_reports
 
 
 def score_models(
@@ -473,6 +481,7 @@ def score_models(
     tail_metrics: Sequence[TailMetrics],
     var_backtests: Sequence[VarBacktestResult],
     sim_metrics: Sequence[SimulationMetrics],
+    realism_reports: Dict[str, dict],
     weights: Optional[Dict[str, float]] = None,
 ) -> List[ModelScore]:
     """
@@ -499,53 +508,57 @@ def score_models(
     if weights is None:
         weights = {"aic": 0.2, "tail": 0.4, "var": 0.3, "cluster": 0.1}  # Updated per spec
 
-    # Index metrics by model_name for convenience
     fit_by_name = {fr.model_name: fr for fr in fit_results}
     tail_by_name = {tm.model_name: tm for tm in tail_metrics}
     sim_by_name = {sm.model_name: sm for sm in sim_metrics}
 
-    # For VaR tests, aggregate per model across levels
-    var_pass_rate: Dict[str, float] = {}
+    aic_values = [fr.aic for fr in fit_results if np.isfinite(fr.aic)]
+    if aic_values:
+        aic_min, aic_max = min(aic_values), max(aic_values)
+    else:
+        aic_min = aic_max = 0.0
+    aic_denom = (aic_max - aic_min) or 1.0
+
+    var_by_name: Dict[str, List[VarBacktestResult]] = {}
     for vb in var_backtests:
-        var_pass_rate.setdefault(vb.model_name, []).append(1.0 if vb.passed else 0.0)
-    var_pass_rate = {k: float(np.mean(v)) for k, v in var_pass_rate.items()}
+        var_by_name.setdefault(vb.model_name, []).append(vb)
+
+    def _var_penalty(entries: List[VarBacktestResult]) -> float:
+        if not entries:
+            return 0.0
+        penalties = []
+        for vb in entries:
+            if vb.kupiec_pvalue < 0.01 and vb.christoffersen_pvalue < 0.01:
+                penalties.append(1.0)
+                continue
+            kupiec_shortfall = max(0.0, 0.05 - vb.kupiec_pvalue) / 0.05
+            christ_shortfall = max(0.0, 0.05 - vb.christoffersen_pvalue) / 0.05
+            penalties.append((kupiec_shortfall + christ_shortfall) / 2.0)
+        return float(np.mean(penalties))
 
     scores: List[ModelScore] = []
 
-    model_names = {fr.model_name for fr in fit_results}
-    for name in model_names:
-        fr = fit_by_name[name]
+    for name, fr in fit_by_name.items():
+        aic_norm = float(((fr.aic - aic_min) / aic_denom) if np.isfinite(fr.aic) else 1.0)
         tm = tail_by_name.get(name)
-        sm = sim_by_name.get(name)
+        tail_err = tm.tail_error_99 if tm else 1.0
+        var_penalty = _var_penalty(var_by_name.get(name, []))
+        deltas = realism_reports.get(name, {}).get("deltas", {})
+        cluster_error = abs(deltas.get("annualized_vol", 0.0)) + abs(deltas.get("acf_sq_lag1", 0.0))
 
-        # Normalize / invert metrics as needed (lower AIC is better, lower tail error better, etc.)
-        aic_component = -fr.aic if np.isfinite(fr.aic) else -1e9
-
-        tail_component = 0.0
-        if tm is not None:
-            tail_component = - (tm.tail_error_95 + tm.tail_error_99) / 2.0
-
-        var_component = var_pass_rate.get(name, 0.0)
-
-        cluster_component = 0.0
-        if sm is not None:
-            # You can design cluster_component as closeness of acf1 to empirical target;
-            # here we just reward positive clustering signal.
-            cluster_component = sm.acf_sq_returns_lag1
+        total = composite_score(aic_norm, tail_err, var_penalty, cluster_error, weights=(
+            weights["aic"],
+            weights["tail"],
+            weights["var"],
+            weights["cluster"],
+        ))
 
         components = {
-            "aic": aic_component,
-            "tail": tail_component,
-            "var": var_component,
-            "cluster": cluster_component,
+            "aic_norm": aic_norm,
+            "tail_error_99": tail_err,
+            "var_penalty": var_penalty,
+            "vol_cluster_error": cluster_error,
         }
-
-        total = (
-            weights["aic"] * aic_component
-            + weights["tail"] * tail_component
-            + weights["var"] * var_component
-            + weights["cluster"] * cluster_component
-        )
 
         scores.append(
             ModelScore(
@@ -563,6 +576,7 @@ def select_best_model(
     scores: Sequence[ModelScore],
     require_heavy_tails: bool,
     fit_results: Sequence[FitResult],
+    constraints: Optional[Dict[str, Dict[str, bool]]] = None,
 ) -> Optional[ModelSpec]:
     """
     Select the best model by score, optionally requiring it to be heavy-tailed.
@@ -583,6 +597,15 @@ def select_best_model(
             for name, fr in fit_by_name.items()
             if fr.heavy_tailed is True and name in score_by_name
         ]
+    else:
+        eligible_names = [name for name in score_by_name]
+
+    if constraints:
+        eligible_names = [
+            name
+            for name in eligible_names
+            if constraints.get(name, {}).get("var_pass", True)
+        ]
 
     best_name = _best(eligible_names)
     if best_name is None:
@@ -591,7 +614,12 @@ def select_best_model(
             "no heavy-tailed models available; falling back to best available fit",
             extra={"candidates": list(fit_by_name.keys())},
         )
-        best_name = _best(list(fit_by_name.keys()))
+        fallback_names = [name for name in fit_by_name.keys() if name in score_by_name]
+        if constraints:
+            fallback_names = [
+                name for name in fallback_names if constraints.get(name, {}).get("var_pass", True)
+            ]
+        best_name = _best(fallback_names)
 
     if best_name is None:
         return None
@@ -712,10 +740,7 @@ def audit_distributions_for_symbol(
             return DistributionAuditResult(**data)  # type: ignore[arg-type]
         warn_if_stale(cache_path, ttl_days=TTL_DAYS)
 
-    n = len(log_returns)
-    n_train = max(50, int(train_fraction * n))
-    r_train = log_returns[:n_train]
-    r_test = log_returns[n_train:]
+    r_train, r_test = train_test_split(log_returns, train_fraction=train_fraction, min_train=50)
 
     if candidate_models is None:
         candidate_models = [
@@ -734,17 +759,27 @@ def audit_distributions_for_symbol(
             "Distribution audit failed: no models converged | " + status_summary
         )
 
-    tail_metrics = compute_tail_metrics(r_train, candidate_models)
+    tail_metrics, samples_by_model = compute_tail_metrics(
+        r_train,
+        candidate_models,
+        fit_results,
+        seed=seed,
+    )
 
-    var_backtests = run_var_backtests(r_train, r_test, candidate_models)
+    var_backtests = run_var_backtests(r_test, candidate_models, fit_results, samples_by_model)
+
+    hist_metrics = compute_historical_metrics(r_train)
 
     s0 = float(s0_override if s0_override is not None else prices.iloc[-1])
-    sim_metrics = simulate_paths_and_metrics(
+    sim_metrics, realism_reports = simulate_paths_and_metrics(
         symbol=symbol,
         s0=s0,
         fitted_models=candidate_models,
+        fit_results=fit_results,
+        hist_metrics=hist_metrics,
         paths=10_000,
         steps=252,
+        seed=seed,
     )
 
     scores = score_models(
@@ -752,64 +787,43 @@ def audit_distributions_for_symbol(
         tail_metrics=tail_metrics,
         var_backtests=var_backtests,
         sim_metrics=sim_metrics,
+        realism_reports=realism_reports,
     )
+
+    var_entries: Dict[str, List[VarBacktestResult]] = {}
+    for vb in var_backtests:
+        var_entries.setdefault(vb.model_name, []).append(vb)
+
+    constraints = {
+        fr.model_name: {
+            "heavy_tailed": bool(fr.heavy_tailed),
+            "var_pass": not any(
+                r.kupiec_pvalue < 0.01 and r.christoffersen_pvalue < 0.01
+                for r in var_entries.get(fr.model_name, [])
+            ),
+        }
+        for fr in fit_results
+    }
 
     best_model = select_best_model(
         candidate_models=candidate_models,
         scores=scores,
         require_heavy_tails=require_heavy_tails,
         fit_results=fit_results,
+        constraints=constraints,
     )
     best_fit = select_best_fit(fit_results, best_model)
 
     # Tail diagnostics (QQ/tail errors/kurtosis) per model
     tail_reports: Dict[str, dict] = {}
-    for spec in candidate_models:
+    for name, samples in samples_by_model.items():
         try:
-            fitter = spec.cls if hasattr(spec.cls, "sample") else spec.cls()
-            samples = fitter.sample(n_paths=50_000, n_steps=1).reshape(-1)  # type: ignore[attr-defined]
-            tail_reports[spec.name] = build_tail_report(r_train, samples)
+            tail_reports[name] = build_tail_report(r_train, samples)
         except Exception as exc:
-            log.warning("tail diagnostics failed", extra={"model": spec.name, "error": str(exc)})
-
-    # Simulation realism metrics per model
-    hist_metrics = compute_historical_metrics(r_train)
-    realism_reports: Dict[str, dict] = {}
-    for spec in candidate_models:
-        try:
-            fitter = spec.cls if hasattr(spec.cls, "sample") else spec.cls()
-            sim_paths = generate_paths(fitter, n_paths=500, n_steps=60, seed=42)  # type: ignore[arg-type]
-            sim_rets = sim_paths.reshape(sim_paths.shape[0], -1)
-            sim_metrics = {
-                "annualized_vol": annualized_volatility(sim_rets.flatten()),
-                "acf_sq_lag1": autocorr_squared_returns(sim_rets.flatten(), lag=1),
-                "extremes": extreme_move_frequencies(sim_rets.flatten()),
-            }
-            realism_reports[spec.name] = build_realism_report(sim_metrics, hist_metrics)
-        except Exception as exc:
-            log.warning(f"Realism metrics failed for {spec.name}: {exc}", extra={"model": spec.name, "error": str(exc)})
+            log.warning("tail diagnostics failed", extra={"model": name, "error": str(exc)})
 
     # Selection report using simple constraints (heavy-tail & VaR pass)
-    constraints = {
-        fr.model_name: {
-            "heavy_tailed": fr.heavy_tailed,
-            "var_pass": any(vb.passed for vb in var_backtests if vb.model_name == fr.model_name),
-        }
-        for fr in fit_results
-    }
-    aic_norms = normalize_aic([fr.aic for fr in fit_results])
-    score_entries = []
-    for fr, aic_norm in zip(fit_results, aic_norms):
-        tail_entry = next((tm for tm in tail_metrics if tm.model_name == fr.model_name), None)
-        tail_err = 0.0
-        if tail_entry:
-            tail_err = (tail_entry.tail_error_95 + tail_entry.tail_error_99) / 2.0
-        var_penalty = 0.0 if constraints[fr.model_name]["var_pass"] else 1.0
-        cluster_err = 0.0
-        score_val = composite_score(aic_norm, tail_err, var_penalty, cluster_err)
-        score_entries.append({"model": fr.model_name, "score": score_val})
-    chosen_model = select_model(score_entries, constraints)
-    selection_report = build_selection_report(score_entries, chosen_model)
+    selection_report = build_selection_report(scores, best_model.name if best_model else None)
 
     # Generate fit diagnostic plots if requested
     if plot_fit:
@@ -875,7 +889,13 @@ def fit_best_distribution_for_returns(
         ModelSpec(name="garch_t", cls=GarchTFitter(), config={}),
     ]
     fit_results = fit_candidate_models(returns, candidate_models)
-    scores = score_models(fit_results=fit_results, tail_metrics=[], var_backtests=[], sim_metrics=[])
+    scores = score_models(
+        fit_results=fit_results,
+        tail_metrics=[],
+        var_backtests=[],
+        sim_metrics=[],
+        realism_reports={},
+    )
     best_model = select_best_model(candidate_models, scores, require_heavy_tails, fit_results)
     best_fit = select_best_fit(fit_results, best_model)
 

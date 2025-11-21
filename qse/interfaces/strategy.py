@@ -3,20 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
 import numpy as np
 
-from qse.models.options import OptionSpec
+from qse.schema.signals import StrategySignals
 from qse.schema.strategy import StrategyParams
-
-
-@dataclass
-class StrategySignals:
-    signals_stock: np.ndarray
-    signals_option: np.ndarray
-    option_spec: OptionSpec | None
-    features_used: list[str]
 
 
 class Strategy(ABC):
@@ -30,4 +21,3 @@ class Strategy(ABC):
         params: StrategyParams,
     ) -> StrategySignals:
         """Return strategy signals for stock and option legs."""
-

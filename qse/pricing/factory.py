@@ -5,11 +5,16 @@ from __future__ import annotations
 from qse.config.factories import FactoryBase
 from qse.exceptions import DependencyError
 from qse.pricing.black_scholes import BlackScholesPricer
+from qse.pricing.py_vollib import PyVollibPricer
+from qse.pricing.quantlib_stub import QuantLibPricer
 
 _PRICERS = {
     "black_scholes": BlackScholesPricer,
     "black-scholes": BlackScholesPricer,
     "bs": BlackScholesPricer,
+    "py_vollib": PyVollibPricer,
+    "py-vollib": PyVollibPricer,
+    "quantlib": QuantLibPricer,
 }
 
 

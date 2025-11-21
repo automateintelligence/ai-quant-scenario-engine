@@ -472,7 +472,7 @@ def mock_run_config():
 
 ---
 
-## Phase 6: User Story 2 - Parameter grid exploration (Priority: P2)
+## Phase 6: User Story 2 - Strategy Parameter grid exploration (Priority: P2)
 
 **Goal**: Define parameter grid, run batch evaluations in parallel, receive aggregate metrics (mean, CVaR, drawdown) per configuration
 
@@ -482,18 +482,19 @@ def mock_run_config():
 
 #### Grid Execution (US2)
 
-- [ ] T074 [US2] Implement grid parameter expansion in qse/simulation/grid.py to generate StrategyParams combinations per contracts/openapi.yaml StrategyGridConfig
-- [ ] T075 [US2] Create grid runner with ProcessPoolExecutor in qse/simulation/grid.py using max_workers from config per plan.md concurrency model (lines 329-367: clamp workers, collect partial results, handle failures per FR-062/081)
-- [ ] T076 [US2] Implement per-config metrics collection and aggregation in qse/simulation/grid.py
-- [ ] T077 [US2] Add objective function scoring and ranking in qse/simulation/metrics.py per FR-007 and spec.md US2 acceptance scenario 1
-- [ ] T078 [US2] Implement resource limit preflight check in qse/simulation/grid.py per FR-018 (estimate time/memory for N configs using T017 estimator, abort if > thresholds, emit warnings at 50%/90% per plan.md lines 379-387)
-- [ ] T079 [US2] Add race condition prevention and output integrity validation per spec.md US2 acceptance scenario 2 (atomic writes per T043a, validate result completeness)
+
+- [X] T074 [US2] Implement grid parameter expansion in qse/simulation/grid.py to generate StrategyParams combinations per contracts/openapi.yaml StrategyGridConfig
+- [X] T075 [US2] Create grid runner with ProcessPoolExecutor in qse/simulation/grid.py using max_workers from config per plan.md concurrency model (lines 329-367: clamp workers, collect partial results, handle failures per FR-062/081)
+- [X] T076 [US2] Implement per-config metrics collection and aggregation in qse/simulation/grid.py
+- [X] T077 [US2] Add objective function scoring and ranking in qse/simulation/metrics.py per FR-007 and spec.md US2 acceptance scenario 1
+- [X] T078 [US2] Implement resource limit preflight check in qse/simulation/grid.py per FR-018 (estimate time/memory for N configs using T017 estimator, abort if > thresholds, emit warnings at 50%/90% per plan.md lines 379-387)
+- [X] T079 [US2] Add race condition prevention and output integrity validation per spec.md US2 acceptance scenario 2 (atomic writes per T043a, validate result completeness)
 
 #### CLI (US2)
 
-- [ ] T080 [US2] Create grid command in qse/cli/commands/grid.py with grid parameter per contracts/openapi.yaml GridRequest
-- [ ] T081 [US2] Wire grid CLI to grid runner with progress tracking and warnings per FR-018 (emit progress, time budget warnings per T049)
-- [ ] T082 [US2] Implement GridResponse serialization with ranked configurations per contracts/openapi.yaml
+- [X] T080 [US2] Create grid command in qse/cli/commands/grid.py with grid parameter per contracts/openapi.yaml GridRequest
+- [X] T081 [US2] Wire grid CLI to grid runner with progress tracking and warnings per FR-018 (emit progress, time budget warnings per T049)
+- [X] T082 [US2] Implement GridResponse serialization with ranked configurations per contracts/openapi.yaml
 
 **Checkpoint**: User Story 2 complete - can execute parameter grids with ranking
 
@@ -661,18 +662,18 @@ def mock_run_config():
 
 #### Feature Management (US3)
 
-- [ ] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
-- [ ] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
-- [ ] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
-- [ ] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
-- [ ] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
-- [ ] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
+- [X] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
+- [X] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
+- [X] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
+- [X] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
+- [X] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
+- [X] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
 
 #### Strategy Integration (US3)
 
-- [ ] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
-- [ ] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
-- [ ] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
+- [X] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
+- [X] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
+- [X] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
 
 **Checkpoint**: User Story 3 complete - feature enrichment without code changes verified
 
@@ -688,22 +689,22 @@ def mock_run_config():
 
 #### Provenance Tracking (US8)
 
-- [ ] T111 [US8] Enhance run_meta.json to capture all provenance fields per spec.md US8 acceptance scenario 1/SC-015 (symbol, timeframe, data_source, distribution, seeds, strategy_params, component_versions; ensure T044 completeness)
-- [ ] T112 [P] [US8] Implement data version fingerprinting in qse/data/versioning.py to detect Parquet schema/content changes per FR-019/SC-015 (reference T023a fingerprinting, add version comparison logic)
-- [ ] T113 [US8] Add component version tracking in run_meta (package versions, git commit) per spec.md US8 acceptance scenario 1/FR-021 (already in T018a, ensure git SHA capture working)
+- [X] T111 [US8] Enhance run_meta.json to capture all provenance fields per spec.md US8 acceptance scenario 1/SC-015 (symbol, timeframe, data_source, distribution, seeds, strategy_params, component_versions; ensure T044 completeness)
+- [X] T112 [P] [US8] Implement data version fingerprinting in qse/data/versioning.py to detect Parquet schema/content changes per FR-019/SC-015 (reference T023a fingerprinting, add version comparison logic)
+- [X] T113 [US8] Add component version tracking in run_meta (package versions, git commit) per spec.md US8 acceptance scenario 1/FR-021 (already in T018a, ensure git SHA capture working)
 
 #### Replay Functionality (US8)
 
-- [ ] T114 [US8] Implement replay mode in qse/simulation/replay.py to reload run_meta and regenerate paths per FR-019/FR-034 and spec.md US8 acceptance scenario 2
-- [ ] T115 [US8] Add data drift detection with warning/block per FR-019/SC-015 (compare fingerprints from T112 vs current data, block unless allow_data_drift=true)
-- [ ] T116 [US8] Implement npz-backed replay to load persisted MC paths when available per spec.md US8 acceptance scenario 2 option 2 (check for .npz files, load if present, otherwise regenerate; FR-014 alignment of storage)
-- [ ] T117 [US8] Add replay metadata tagging (is_replay, original_run_id, data_drift_status) per FR-019/FR-021 (extend run_meta schema, record drift decisions)
+- [X] T114 [US8] Implement replay mode in qse/simulation/replay.py to reload run_meta and regenerate paths per FR-019/FR-034 and spec.md US8 acceptance scenario 2
+- [X] T115 [US8] Add data drift detection with warning/block per FR-019/SC-015 (compare fingerprints from T112 vs current data, block unless allow_data_drift=true)
+- [X] T116 [US8] Implement npz-backed replay to load persisted MC paths when available per spec.md US8 acceptance scenario 2 option 2 (check for .npz files, load if present, otherwise regenerate; FR-014 alignment of storage)
+- [X] T117 [US8] Add replay metadata tagging (is_replay, original_run_id, data_drift_status) per FR-019/FR-021 (extend run_meta schema, record drift decisions)
 
 #### CLI (US8)
 
-- [ ] T118 [US8] Create replay command in qse/cli/commands/replay.py per contracts/openapi.yaml ReplayRequest (FR-033)
-- [ ] T119 [US8] Implement --replay flag or run_meta_path input with validation (FR-033/FR-019)
-- [ ] T120 [US8] Wire replay CLI to replay mode with proper error handling per spec.md US8 acceptance scenario 3/FR-041 (handle missing run_meta, data drift blocks, MC path missing)
+- [X] T118 [US8] Create replay command in qse/cli/commands/replay.py per contracts/openapi.yaml ReplayRequest (FR-033)
+- [X] T119 [US8] Implement --replay flag or run_meta_path input with validation (FR-033/FR-019)
+- [X] T120 [US8] Wire replay CLI to replay mode with proper error handling per spec.md US8 acceptance scenario 3/FR-041 (handle missing run_meta, data drift blocks, MC path missing)
 
 **Checkpoint**: User Story 8 complete - full provenance and replay capability verified
 
@@ -713,10 +714,10 @@ def mock_run_config():
 
 **Purpose**: Advanced toggles and performance optimizations referenced in plan.md but not blocking MVP
 
-- [ ] T121 [P] Implement GARCH-T distribution in qse/distributions/garch_t.py behind use_garch flag per FR-002, FR-032, FR-037 (include stationarity checks per T025/T026 pattern, warn on expected latency per research.md decision 2)
-- [ ] T122 [P] Add numba JIT compilation to hot paths in MC generator for >2× speedup per FR-040 performance budget (annotate generate_price_paths with @njit, validate performance gains)
-- [ ] T123 [P] Implement optional plotly report generation in qse/utils/plots.py per FR-008
-- [ ] T124 [P] Add quantstats integration for tearsheet generation in qse/utils/quantstats_report.py per plan.md dependencies (optional reporting extension)
+- [X] T121 [P] Implement GARCH-T distribution in qse/distributions/garch_t.py behind use_garch flag per FR-002, FR-032, FR-037 (include stationarity checks per T025/T026 pattern, warn on expected latency per research.md decision 2)
+- [X] T122 [P] Add numba JIT compilation to hot paths in MC generator for >2× speedup per FR-040 performance budget (annotate generate_price_paths with @njit, validate performance gains)
+- [X] T123 [P] Implement optional plotly report generation in qse/utils/plots.py per FR-008
+- [X] T124 [P] Add quantstats integration for tearsheet generation in qse/utils/quantstats_report.py per plan.md dependencies (optional reporting extension)
 - [ ] T125 Create performance profiling utilities in qse/utils/profiling.py to validate SC-001/SC-002/SC-003 time budgets
 - [ ] T125a Add structured logging (JSON) diagnostics when performance budgets breach per FR-039/040 (emit warnings at 50%/90% of time budgets, detailed timing breakdowns)
 
