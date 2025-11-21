@@ -714,10 +714,10 @@ def mock_run_config():
 
 **Purpose**: Advanced toggles and performance optimizations referenced in plan.md but not blocking MVP
 
-- [ ] T121 [P] Implement GARCH-T distribution in qse/distributions/garch_t.py behind use_garch flag per FR-002, FR-032, FR-037 (include stationarity checks per T025/T026 pattern, warn on expected latency per research.md decision 2)
-- [ ] T122 [P] Add numba JIT compilation to hot paths in MC generator for >2× speedup per FR-040 performance budget (annotate generate_price_paths with @njit, validate performance gains)
-- [ ] T123 [P] Implement optional plotly report generation in qse/utils/plots.py per FR-008
-- [ ] T124 [P] Add quantstats integration for tearsheet generation in qse/utils/quantstats_report.py per plan.md dependencies (optional reporting extension)
+- [X] T121 [P] Implement GARCH-T distribution in qse/distributions/garch_t.py behind use_garch flag per FR-002, FR-032, FR-037 (include stationarity checks per T025/T026 pattern, warn on expected latency per research.md decision 2)
+- [X] T122 [P] Add numba JIT compilation to hot paths in MC generator for >2× speedup per FR-040 performance budget (annotate generate_price_paths with @njit, validate performance gains)
+- [X] T123 [P] Implement optional plotly report generation in qse/utils/plots.py per FR-008
+- [X] T124 [P] Add quantstats integration for tearsheet generation in qse/utils/quantstats_report.py per plan.md dependencies (optional reporting extension)
 - [ ] T125 Create performance profiling utilities in qse/utils/profiling.py to validate SC-001/SC-002/SC-003 time budgets
 - [ ] T125a Add structured logging (JSON) diagnostics when performance budgets breach per FR-039/040 (emit warnings at 50%/90% of time budgets, detailed timing breakdowns)
 
