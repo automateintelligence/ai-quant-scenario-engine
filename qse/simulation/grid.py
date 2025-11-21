@@ -77,7 +77,7 @@ def _clamp_workers(max_workers: int | None) -> int:
     cpu_count = os.cpu_count() or 1
     if max_workers is None:
         return min(6, cpu_count)
-    return max(1, min(max_workers, max(cpu_count - 2, 1), 6))
+    return max(1, min(max_workers, 6, max(cpu_count - 2, 1)))
 
 
 def _detect_total_ram_gb() -> float:
@@ -153,23 +153,31 @@ def expand_strategy_grid(strategy: StrategyGridDefinition) -> list[StrategyParam
         value = strategy.grid[key]
         values.append(value if isinstance(value, Sequence) and not isinstance(value, (str, bytes)) else [value])
 
-    if not values:
-        values = [[None]]  # single combination when no explicit grid values provided
-        keys = []
-
     combinations: list[StrategyParams] = []
-    for combo in product(*values):
-        params = base_params | dict(zip(keys, combo))
+    if not values:
         combinations.append(
             StrategyParams(
                 name=strategy.name,
                 kind=strategy.kind,
-                params=params,
+                params=base_params,
                 position_sizing=shared.get("position_sizing", "fixed_notional"),
                 fees=float(shared.get("fees", 0.0005)),
                 slippage=float(shared.get("slippage", 0.65)),
             )
         )
+    else:
+        for combo in product(*values):
+            params = base_params | dict(zip(keys, combo))
+            combinations.append(
+                StrategyParams(
+                    name=strategy.name,
+                    kind=strategy.kind,
+                    params=params,
+                    position_sizing=shared.get("position_sizing", "fixed_notional"),
+                    fees=float(shared.get("fees", 0.0005)),
+                    slippage=float(shared.get("slippage", 0.65)),
+                )
+            )
     return combinations
 
 
