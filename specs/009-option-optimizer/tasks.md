@@ -79,10 +79,10 @@
 **Goal**: Pluggable StrategyScorer with intraday-spreads default and score decomposition.
 **Independent Test**: Weight changes shift rankings; score decomposition printed.
 
-- [ ] T026 [P] [US5] Implement StrategyScorer interface + plugin loader in `src/qse/scorers/base.py` (spec FR-034/FR-040)
-- [ ] T027 [US5] Implement intraday-spreads scorer with normalization/penalties in `src/qse/scorers/intraday_spreads.py` (spec FR-035–FR-039)
-- [ ] T028 [US5] Add score decomposition output to optimizer results in `src/qse/optimizers/strategy_optimizer.py` (spec FR-041)
-- [ ] T029 [P] [US5] Add unit tests for weight override and ranking changes in `tests/unit/scorers/test_intraday_spreads.py` (spec SC-005)
+- [X] T026 [P] [US5] Implement StrategyScorer interface + plugin loader in `src/qse/scorers/base.py` (spec FR-034/FR-040)
+- [X] T027 [US5] Implement intraday-spreads scorer with normalization/penalties in `src/qse/scorers/intraday_spreads.py` (spec FR-035–FR-039)
+- [X] T028 [US5] Add score decomposition output to optimizer results in `src/qse/optimizers/strategy_optimizer.py` (spec FR-041)
+- [X] T029 [P] [US5] Add unit tests for weight override and ranking changes in `tests/unit/scorers/test_intraday_spreads.py` (spec SC-005)
 
 ---
 

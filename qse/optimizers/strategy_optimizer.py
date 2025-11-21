@@ -1,10 +1,12 @@
-"""Strategy Optimizer - Core optimization engine for discovering optimal option structures (US1/T013)."""
+"""Strategy Optimizer - Core optimization engine for discovering optimal option structures (US1/T013, US5/T028)."""
 
 from __future__ import annotations
 
 import logging
 import time
 from typing import Any
+
+from qse.scorers.intraday_spreads import IntradaySpreadsScorer
 
 
 class StrategyOptimizer:
@@ -34,9 +36,13 @@ class StrategyOptimizer:
         self.filter_config = config.get("filters", {})
         self.scoring_config = config.get("scoring", {})
 
+        # Initialize scorer (US5/T028, FR-034, FR-035)
+        self.scorer = IntradaySpreadsScorer()
+
         self.log.info(
             f"StrategyOptimizer initialized: num_paths={self.mc_config.get('num_paths', 5000)} "
-            f"max_capital={self.filter_config.get('max_capital', 15000)}"
+            f"max_capital={self.filter_config.get('max_capital', 15000)} "
+            f"scorer={self.scorer.__class__.__name__}"
         )
 
     def optimize(self, ticker: str, regime: str, trade_horizon: int) -> dict[str, Any]:
@@ -157,3 +163,33 @@ class StrategyOptimizer:
         except Exception as exc:
             self.log.exception(f"Retest failed for {ticker}: {exc}")
             raise
+
+    def _add_score_decomposition(self, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Add composite score and decomposition to each candidate (US5/T028, FR-041).
+
+        Mutates candidate dicts to include:
+            - composite_score: Overall score in [0, 1] range
+            - score_decomposition: Dict with individual component contributions
+
+        Args:
+            candidates: List of CandidateStructure dicts with metrics populated
+
+        Returns:
+            Same candidates list with scoring added (for chaining)
+
+        Spec: FR-041 (score decomposition in output)
+        Tasks: T028
+        """
+        for candidate in candidates:
+            metrics = candidate.get("metrics", {})
+
+            # Compute composite score
+            candidate["composite_score"] = self.scorer.score(candidate, metrics, self.config)
+
+            # Add decomposition for diagnostics
+            candidate["score_decomposition"] = self.scorer.decompose(
+                candidate, metrics, self.config
+            )
+
+        return candidates
