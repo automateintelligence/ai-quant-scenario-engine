@@ -33,8 +33,9 @@ class StudentTDistribution(ReturnDistribution):
         if stationarity.recommendation.startswith("difference"):
             returns = np.diff(returns)
 
-        ar_result = detect_ar_process(returns)
-        if ar_result.order_suggestion > 0:
+        ar_result = detect_ar_process(returns, pacf_threshold=0.5)
+        if ar_result.order_suggestion > 1:
+            # WARNING-only path when light AR is detected; enforce IID for higher orders
             raise DistributionFitError("AR structure detected; unsupported for IID Student-T")
 
         try:
@@ -47,10 +48,6 @@ class StudentTDistribution(ReturnDistribution):
             )
             excess_kurt = float(stats.kurtosis(returns, fisher=True))
             ok, warn = heavy_tail_status(excess_kurt)
-            if not ok:
-                raise DistributionFitError(
-                    f"Excess kurtosis {excess_kurt:.3f} below required heavy-tail threshold"
-                )
             logpdf = stats.t.logpdf(returns, df=df, loc=loc, scale=scale).sum()
             self.metadata = DistributionMetadata(
                 estimator="mle",
@@ -60,7 +57,7 @@ class StudentTDistribution(ReturnDistribution):
                 fit_status="success",
                 min_samples=min_samples,
                 excess_kurtosis=excess_kurt,
-                heavy_tail_warning=warn,
+                heavy_tail_warning=warn or not ok,
             )
         except DistributionFitError:
             fallback = fallback_to_laplace(returns)

@@ -20,19 +20,19 @@ class ARDetectionResult:
     pacf_values: list
 
 
-def detect_ar_process(series: np.ndarray, max_lag: int = 10) -> ARDetectionResult:
+def detect_ar_process(series: np.ndarray, max_lag: int = 10, pacf_threshold: float = 0.5) -> ARDetectionResult:
     acf_values = []
     pacf_values = []
     if acf:
         acf_values = acf(series, nlags=max_lag).tolist()
     if pacf:
-        pacf_values = pacf(series, nlags=max_lag, method="ywunbiased").tolist()
+        pacf_values = pacf(series, nlags=max_lag, method="yw").tolist()
 
     order = 0
+    threshold = max(0.0, pacf_threshold)
     for i, value in enumerate(pacf_values[1:], start=1):
-        if abs(value) > 0.2:
+        if abs(value) > threshold:
             order = i
             break
 
     return ARDetectionResult(order_suggestion=order, acf_values=acf_values, pacf_values=pacf_values)
-

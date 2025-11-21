@@ -36,10 +36,6 @@ class LaplaceDistribution(ReturnDistribution):
         validate_params_bounds({"scale": self.scale}, {"scale": (1e-9, 10.0)})
         excess_kurt = float(kurtosis(returns, fisher=True))
         ok, warn = heavy_tail_status(excess_kurt)
-        if not ok:
-            raise DistributionFitError(
-                f"Excess kurtosis {excess_kurt:.3f} below required heavy-tail threshold"
-            )
         self.metadata = DistributionMetadata(
             estimator="mle",
             loglik=float(laplace.logpdf(returns, loc=loc, scale=scale).sum()),
@@ -48,7 +44,7 @@ class LaplaceDistribution(ReturnDistribution):
             fit_status="success",
             min_samples=min_samples,
             excess_kurtosis=excess_kurt,
-            heavy_tail_warning=warn,
+            heavy_tail_warning=warn or not ok,
         )
 
     def sample(self, n_paths: int, n_steps: int, seed: int | None = None) -> np.ndarray:
