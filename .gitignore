@@ -29,5 +29,6 @@ output/distribution_fits/
 Thumbs.db
 output/distribution_fits/demo_fit_diagnostics.png
 
-# WSL Artifacts
+# Artifacts
 Zone.Identifier
+.hypothesis/    
