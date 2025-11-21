@@ -662,18 +662,18 @@ def mock_run_config():
 
 #### Feature Management (US3)
 
-+ [X] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
-+ [X] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
-+ [X] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
-+ [X] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
-+ [X] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
-+ [X] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
+- [X] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
+- [X] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
+- [X] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
+- [X] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
+- [X] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
+- [X] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
 
 #### Strategy Integration (US3)
 
-+ [X] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
-+ [X] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
-+ [X] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
+- [X] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
+- [X] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
+- [X] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
 
 **Checkpoint**: User Story 3 complete - feature enrichment without code changes verified
 
@@ -689,22 +689,22 @@ def mock_run_config():
 
 #### Provenance Tracking (US8)
 
-- [ ] T111 [US8] Enhance run_meta.json to capture all provenance fields per spec.md US8 acceptance scenario 1/SC-015 (symbol, timeframe, data_source, distribution, seeds, strategy_params, component_versions; ensure T044 completeness)
-- [ ] T112 [P] [US8] Implement data version fingerprinting in qse/data/versioning.py to detect Parquet schema/content changes per FR-019/SC-015 (reference T023a fingerprinting, add version comparison logic)
-- [ ] T113 [US8] Add component version tracking in run_meta (package versions, git commit) per spec.md US8 acceptance scenario 1/FR-021 (already in T018a, ensure git SHA capture working)
+- [X] T111 [US8] Enhance run_meta.json to capture all provenance fields per spec.md US8 acceptance scenario 1/SC-015 (symbol, timeframe, data_source, distribution, seeds, strategy_params, component_versions; ensure T044 completeness)
+- [X] T112 [P] [US8] Implement data version fingerprinting in qse/data/versioning.py to detect Parquet schema/content changes per FR-019/SC-015 (reference T023a fingerprinting, add version comparison logic)
+- [X] T113 [US8] Add component version tracking in run_meta (package versions, git commit) per spec.md US8 acceptance scenario 1/FR-021 (already in T018a, ensure git SHA capture working)
 
 #### Replay Functionality (US8)
 
-- [ ] T114 [US8] Implement replay mode in qse/simulation/replay.py to reload run_meta and regenerate paths per FR-019/FR-034 and spec.md US8 acceptance scenario 2
-- [ ] T115 [US8] Add data drift detection with warning/block per FR-019/SC-015 (compare fingerprints from T112 vs current data, block unless allow_data_drift=true)
-- [ ] T116 [US8] Implement npz-backed replay to load persisted MC paths when available per spec.md US8 acceptance scenario 2 option 2 (check for .npz files, load if present, otherwise regenerate; FR-014 alignment of storage)
-- [ ] T117 [US8] Add replay metadata tagging (is_replay, original_run_id, data_drift_status) per FR-019/FR-021 (extend run_meta schema, record drift decisions)
+- [X] T114 [US8] Implement replay mode in qse/simulation/replay.py to reload run_meta and regenerate paths per FR-019/FR-034 and spec.md US8 acceptance scenario 2
+- [X] T115 [US8] Add data drift detection with warning/block per FR-019/SC-015 (compare fingerprints from T112 vs current data, block unless allow_data_drift=true)
+- [X] T116 [US8] Implement npz-backed replay to load persisted MC paths when available per spec.md US8 acceptance scenario 2 option 2 (check for .npz files, load if present, otherwise regenerate; FR-014 alignment of storage)
+- [X] T117 [US8] Add replay metadata tagging (is_replay, original_run_id, data_drift_status) per FR-019/FR-021 (extend run_meta schema, record drift decisions)
 
 #### CLI (US8)
 
-- [ ] T118 [US8] Create replay command in qse/cli/commands/replay.py per contracts/openapi.yaml ReplayRequest (FR-033)
-- [ ] T119 [US8] Implement --replay flag or run_meta_path input with validation (FR-033/FR-019)
-- [ ] T120 [US8] Wire replay CLI to replay mode with proper error handling per spec.md US8 acceptance scenario 3/FR-041 (handle missing run_meta, data drift blocks, MC path missing)
+- [X] T118 [US8] Create replay command in qse/cli/commands/replay.py per contracts/openapi.yaml ReplayRequest (FR-033)
+- [X] T119 [US8] Implement --replay flag or run_meta_path input with validation (FR-033/FR-019)
+- [X] T120 [US8] Wire replay CLI to replay mode with proper error handling per spec.md US8 acceptance scenario 3/FR-041 (handle missing run_meta, data drift blocks, MC path missing)
 
 **Checkpoint**: User Story 8 complete - full provenance and replay capability verified
 

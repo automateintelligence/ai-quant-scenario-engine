@@ -25,6 +25,9 @@ class RunMeta:
     symbol: str
     config: dict[str, Any]
     storage_policy: str
+    run_type: str | None = None
+    data_version: dict[str, Any] | None = None
+    data_drift_status: str | None = None
     drift_status: str | None = None
     iv_source: str | None = None
     parameter_stability: str | None = None
@@ -33,6 +36,9 @@ class RunMeta:
     lookback_window: int | None = None
     reproducibility: ReproducibilityContext | None = None
     distribution_audit: dict[str, Any] | None = None
+    metrics: dict[str, Any] | None = None
+    is_replay: bool = False
+    original_run_id: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -60,9 +66,15 @@ class RunMeta:
         var_method: str | None = None,
         lookback_window: int | None = None,
         drift_status: str | None = None,
+        data_version: dict[str, Any] | None = None,
+        data_drift_status: str | None = None,
         iv_source: str | None = None,
         parameter_stability: str | None = None,
         distribution_audit: dict[str, Any] | None = None,
+        run_type: str | None = None,
+        metrics: dict[str, Any] | None = None,
+        original_run_id: str | None = None,
+        is_replay: bool = False,
     ) -> RunMeta:
         reproducibility = ReproducibilityContext(
             seed=seed,
@@ -79,6 +91,9 @@ class RunMeta:
             symbol=symbol,
             config=config,
             storage_policy=storage_policy,
+            run_type=run_type,
+            data_version=data_version,
+            data_drift_status=data_drift_status,
             drift_status=drift_status,
             iv_source=iv_source,
             parameter_stability=parameter_stability,
@@ -87,6 +102,9 @@ class RunMeta:
             lookback_window=lookback_window,
             reproducibility=reproducibility,
             distribution_audit=distribution_audit,
+            metrics=metrics,
+            original_run_id=original_run_id,
+            is_replay=is_replay,
         )
 
 

@@ -10,6 +10,7 @@ from qse.cli.commands.audit_distributions import audit_distributions
 from qse.cli.commands.compare import compare
 from qse.cli.commands.fetch import fetch
 from qse.cli.commands.grid import grid
+from qse.cli.commands.replay import replay
 from qse.cli.commands.screen import screen
 from qse.cli.commands.conditional import conditional
 from qse.exceptions import (
@@ -28,6 +29,7 @@ app.command()(compare)
 app.command()(screen)
 app.command()(conditional)
 app.command()(grid)
+app.command()(replay)
 app.command()(audit_distributions)
 
 

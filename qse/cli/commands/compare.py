@@ -15,8 +15,11 @@ from qse.distributions.integration.model_loader import load_validated_model
 from qse.exceptions import ConfigValidationError
 from qse.models.options import OptionSpec
 from qse.simulation.run import run_compare
+from qse.schema.run_meta import RunMeta
 from qse.utils.logging import get_logger
 from qse.utils.progress import ProgressReporter
+from qse.utils.artifacts import write_run_artifacts
+from qse.utils.run_meta import build_run_meta
 
 log = get_logger(__name__, component="cli_compare")
 
@@ -176,6 +179,27 @@ def compare(
     )
     progress.tick("Simulation finished")
     typer.echo(result.metrics)
+    run_id = f"run_{cfg['symbol']}_{cfg['seed']}"
+    run_dir = Path("runs") / run_id
+    metrics_dict = result.metrics.to_formatted_dict(include_units=False)
+    run_meta = build_run_meta(
+        run_id=run_id,
+        symbol=cfg["symbol"],
+        config=cfg,
+        storage_policy="memory",
+        seed=cfg["seed"],
+        covariance_estimator=cfg.get("covariance_estimator"),
+        var_method=cfg.get("var_method"),
+        lookback_window=cfg.get("lookback_window"),
+        drift_status=None,
+        iv_source=option_spec.iv_source,
+        parameter_stability=None,
+        distribution_audit=audit_metadata,
+        run_type="compare",
+        metrics=metrics_dict,
+    )
+    write_run_artifacts(run_dir, result.metrics, run_meta)
+    typer.echo(f"Artifacts written to {run_dir}")
     if result.audit_metadata:
         typer.echo(json.dumps({"distribution_audit": result.audit_metadata}, indent=2))
         if not result.audit_metadata.get("model_validated"):
