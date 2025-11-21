@@ -482,18 +482,19 @@ def mock_run_config():
 
 #### Grid Execution (US2)
 
-- [ ] T074 [US2] Implement grid parameter expansion in qse/simulation/grid.py to generate StrategyParams combinations per contracts/openapi.yaml StrategyGridConfig
-- [ ] T075 [US2] Create grid runner with ProcessPoolExecutor in qse/simulation/grid.py using max_workers from config per plan.md concurrency model (lines 329-367: clamp workers, collect partial results, handle failures per FR-062/081)
-- [ ] T076 [US2] Implement per-config metrics collection and aggregation in qse/simulation/grid.py
-- [ ] T077 [US2] Add objective function scoring and ranking in qse/simulation/metrics.py per FR-007 and spec.md US2 acceptance scenario 1
-- [ ] T078 [US2] Implement resource limit preflight check in qse/simulation/grid.py per FR-018 (estimate time/memory for N configs using T017 estimator, abort if > thresholds, emit warnings at 50%/90% per plan.md lines 379-387)
-- [ ] T079 [US2] Add race condition prevention and output integrity validation per spec.md US2 acceptance scenario 2 (atomic writes per T043a, validate result completeness)
+
+- [X] T074 [US2] Implement grid parameter expansion in qse/simulation/grid.py to generate StrategyParams combinations per contracts/openapi.yaml StrategyGridConfig
+- [X] T075 [US2] Create grid runner with ProcessPoolExecutor in qse/simulation/grid.py using max_workers from config per plan.md concurrency model (lines 329-367: clamp workers, collect partial results, handle failures per FR-062/081)
+- [X] T076 [US2] Implement per-config metrics collection and aggregation in qse/simulation/grid.py
+- [X] T077 [US2] Add objective function scoring and ranking in qse/simulation/metrics.py per FR-007 and spec.md US2 acceptance scenario 1
+- [X] T078 [US2] Implement resource limit preflight check in qse/simulation/grid.py per FR-018 (estimate time/memory for N configs using T017 estimator, abort if > thresholds, emit warnings at 50%/90% per plan.md lines 379-387)
+- [X] T079 [US2] Add race condition prevention and output integrity validation per spec.md US2 acceptance scenario 2 (atomic writes per T043a, validate result completeness)
 
 #### CLI (US2)
 
-- [ ] T080 [US2] Create grid command in qse/cli/commands/grid.py with grid parameter per contracts/openapi.yaml GridRequest
-- [ ] T081 [US2] Wire grid CLI to grid runner with progress tracking and warnings per FR-018 (emit progress, time budget warnings per T049)
-- [ ] T082 [US2] Implement GridResponse serialization with ranked configurations per contracts/openapi.yaml
+- [X] T080 [US2] Create grid command in qse/cli/commands/grid.py with grid parameter per contracts/openapi.yaml GridRequest
+- [X] T081 [US2] Wire grid CLI to grid runner with progress tracking and warnings per FR-018 (emit progress, time budget warnings per T049)
+- [X] T082 [US2] Implement GridResponse serialization with ranked configurations per contracts/openapi.yaml
 
 **Checkpoint**: User Story 2 complete - can execute parameter grids with ranking
 
