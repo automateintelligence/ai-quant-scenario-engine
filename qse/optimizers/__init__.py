@@ -1,3 +1,5 @@
-"""Optimizers package for staged option strategy workflows."""
+"""Optimizer package exports."""
 
-__all__ = []
+from qse.optimizers.strategy_optimizer import StrategyOptimizer
+
+__all__ = ["StrategyOptimizer"]
