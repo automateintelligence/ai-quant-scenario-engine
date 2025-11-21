@@ -9,8 +9,8 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Verify local environment has Python 3.11 dependencies installed for data clients and CLI (`pip install -e .[dev]`) (plan.md tech stack)
-- [ ] T002 [P] Create docs/data-sources/README.md capturing available data providers (Schwab primary, yfinance fallback) per plan.md (research Decision 1/2)
+- [X] T001 Verify local environment has Python 3.11 dependencies installed for data clients and CLI (`pip install -e .[dev]`) (plan.md tech stack)
+- [X] T002 [P] Create docs/data-sources/README.md capturing available data providers (Schwab primary, yfinance fallback) per plan.md (research Decision 1/2)
 
 ---
 
