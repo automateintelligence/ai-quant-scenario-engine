@@ -717,8 +717,8 @@ def mock_run_config():
 - [X] T122 [P] Add numba JIT compilation to hot paths in MC generator for >2× speedup per FR-040 performance budget (annotate generate_price_paths with @njit, validate performance gains)
 - [X] T123 [P] Implement optional plotly report generation in qse/utils/plots.py per FR-008
 - [X] T124 [P] Add quantstats integration for tearsheet generation in qse/utils/quantstats_report.py per plan.md dependencies (optional reporting extension)
-- [ ] T125 Create performance profiling utilities in qse/utils/profiling.py to validate SC-001/SC-002/SC-003 time budgets
-- [ ] T125a Add structured logging (JSON) diagnostics when performance budgets breach per FR-039/040 (emit warnings at 50%/90% of time budgets, detailed timing breakdowns)
+- [X] T125 Create performance profiling utilities in qse/utils/profiling.py to validate SC-001/SC-002/SC-003 time budgets
+- [X] T125a Add structured logging (JSON) diagnostics when performance budgets breach per FR-039/040 (emit warnings at 50%/90% of time budgets, detailed timing breakdowns)
 
 ---
 
