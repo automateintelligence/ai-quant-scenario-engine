@@ -81,8 +81,8 @@ class StockBollingerReversionStrategy(Strategy):
         signals_option = np.zeros_like(signals_stock, dtype=np.int32)
 
         features_used = []
-        if isinstance(features, dict):
-            features_used = list(features.keys())
+        if isinstance(features, dict) and {"bb_upper", "bb_middle", "bb_lower"} <= set(features.keys()):
+            features_used = ["bb_upper", "bb_middle", "bb_lower"]
 
         return StrategySignals(
             signals_stock=signals_stock,

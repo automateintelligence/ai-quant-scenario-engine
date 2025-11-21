@@ -74,5 +74,5 @@ class StockSmaTrendStrategy(Strategy):
             signals_stock=signals_stock,
             signals_option=signals_option,
             option_spec=None,
-            features_used=list(features.keys()) if isinstance(features, dict) else [],
+            features_used=[],
         )

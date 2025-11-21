@@ -662,18 +662,18 @@ def mock_run_config():
 
 #### Feature Management (US3)
 
-- [ ] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
-- [ ] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
-- [ ] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
-- [ ] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
-- [ ] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
-- [ ] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
++ [X] T102 [US3] Implement dynamic indicator registry in qse/features/registry.py to declare indicators via config per FR-006
++ [X] T103 [US3] Create indicator definition schema in qse/schema/indicators.py supporting pandas-ta function specs
++ [X] T104 [US3] Extend feature pipeline to apply registered indicators from config per spec.md US3 acceptance scenario 1
++ [X] T105 [P] [US3] Implement macro series loader in qse/data/macro.py with alignment logic per FR-014 (integrate with DataLoader pattern from T020h)
++ [X] T106 [P] [US3] Add macro series alignment with interpolation and tolerance enforcement per FR-014 (max 3× bar interval forward/backfill, warn on exceeding tolerance)
++ [X] T107 [US3] Implement missing feature warning system per spec.md US3 acceptance scenario 2
 
 #### Strategy Integration (US3)
 
-- [ ] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
-- [ ] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
-- [ ] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
++ [X] T108 [US3] Update Strategy interface to accept features DataFrame in generate_signals() per data-model.md
++ [X] T109 [US3] Modify example strategies to demonstrate feature usage (e.g., SMA crossover, RSI threshold in StockBasicStrategy)
++ [X] T110 [US3] Add features_used tracking in StrategySignals per data-model.md (record which features were actually used in signal generation)
 
 **Checkpoint**: User Story 3 complete - feature enrichment without code changes verified
 

@@ -15,6 +15,8 @@ from qse.features.indicators import (
     compute_volume_z,
     ensure_columns_present,
 )
+from qse.features.registry import IndicatorRegistry, apply_indicators
+from qse.schema.indicators import IndicatorDefinition
 from qse.utils.logging import get_logger
 
 log = get_logger(__name__, component="features.pipeline")
@@ -28,6 +30,7 @@ def enrich_ohlcv(
     volume_window: int = 20,
     fillna: bool = True,
     log_output: bool = True,
+    indicator_definitions: tuple[IndicatorDefinition, ...] | None = None,
 ) -> pd.DataFrame:
     """Return a copy of df with derived features appended.
 
@@ -49,6 +52,17 @@ def enrich_ohlcv(
 
     # Volume z-score
     out["volume_z"] = compute_volume_z(out["volume"], window=int(volume_window))
+
+    if indicator_definitions:
+        registry = IndicatorRegistry()
+        out, added, missing = apply_indicators(out, indicator_definitions, registry=registry)
+        if missing:
+            log.warning(
+                "Some configured indicators could not be computed",
+                extra={"missing_indicators": missing},
+            )
+        if added:
+            log.info("Applied dynamic indicators", extra={"added": added})
 
     if fillna:
         out = out.ffill().bfill()

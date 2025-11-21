@@ -52,9 +52,11 @@ class OptionAtmCallMomentumStrategy(Strategy):
 
         # Optional: IV rank filter if provided
         iv_ok = np.ones_like(closes, dtype=bool)
+        features_used: list[str] = []
         if isinstance(features, dict) and "iv_rank" in features:
             iv_rank = np.asarray(features["iv_rank"], dtype=float)
             iv_ok = iv_rank < float(params.params.get("max_iv_rank", 60.0))
+            features_used.append("iv_rank")
 
         raw_direction = np.where(momentum & iv_ok, 1, 0).astype(np.int8)
 
@@ -79,5 +81,5 @@ class OptionAtmCallMomentumStrategy(Strategy):
             signals_stock=signals_stock,
             signals_option=signals_option,
             option_spec=self.option_spec,
-            features_used=list(features.keys()) if isinstance(features, dict) else [],
+            features_used=features_used,
         )
