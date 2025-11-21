@@ -2832,3 +2832,63 @@ Git Workflow - Feature Branch Development
 
   The generated tasks will use the correct ReturnDistribution interface name and avoid
   conflicts with 001-mvp-pipeline infrastructure.
+
+  All TDD Recommendations Implemented
+
+  Your 009-option-optimizer specifications are now 100% compliant with Constitution
+  Principle XIX (Contract-Based Testing) and Section II.XV (Testing Discipline).
+
+  Changes Committed (commit 6f71083)
+
+  spec.md additions:
+  - ✅ FR-076 through FR-081: 6 new testing functional requirements covering coverage,
+  test-first development, runtime budgets, contract tests, and resilience testing
+  - ✅ Testing Strategy section: Comprehensive taxonomy with
+  unit/integration/property/contract/E2E test specifications
+  - ✅ Enhanced acceptance scenarios: US1, US2, US3 now include concrete CLI invocations
+   with expected outputs, metrics, and diagnostics
+
+  plan.md updates:
+  - ✅ Constitution Check section: Detailed TDD compliance mapping with references to
+  FR-076 through FR-081
+
+  Key Specification Enhancements
+
+  1. Testing Strategy Section (new)
+  - Unit tests: ≥80% coverage for qse/{optimizers,pricing,distributions,scorers}
+  - Integration tests: Stage 0→4 pipeline, regime→distribution→pricing flow
+  - Property-based tests: Invariant validation with hypothesis library (pricing bounds,
+  Greeks relationships, monotonicity)
+  - Contract tests: Interface compliance for OptionPricer (1e-2 tolerance per your edit
+  ✓), ReturnDistribution, StrategyScorer
+  - E2E tests: US1 CLI optimization, US8 live monitoring
+  - Test runtime budget: <2 minutes total
+
+  2. Acceptance Scenarios Enhanced
+  - US1 scenarios: Concrete CLI examples with JSON output structures, metrics, runtime
+  targets
+  - US2 scenarios: Stage-by-stage filtering examples with candidate counts and
+  diagnostics
+  - US3 scenarios: Regime loading with multi-step compounding demonstrations, calibrated
+   mode, explicit overrides
+
+  3. Functional Requirements
+  - FR-076: ≥80% line coverage mandate
+  - FR-077: 100% critical path branch coverage
+  - FR-078: Test-first development for complex logic
+  - FR-079: <2 minute test suite runtime
+  - FR-080: Contract testing with 1e-2 tolerance (per your specification)
+  - FR-081: Resilience testing for failure scenarios
+
+  Ready for /speckit:tasks
+
+  Your specifications now provide complete guidance for test-driven development. When
+  you run /speckit:tasks, generated implementation tasks will include:
+  - Corresponding test specifications
+  - Clear acceptance criteria
+  - Property-based test requirements
+  - Contract test validations
+  - Executable examples for validation
+
+  Next step: Run /speckit:tasks from specs/009-option-optimizer/ directory to generate
+  dependency-ordered implementation tasks aligned with Constitution TDD requirements.
