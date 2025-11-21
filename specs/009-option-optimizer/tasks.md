@@ -56,9 +56,9 @@
 **Goal**: Regime labels map to distribution params across table/calibrated/explicit modes; multi-day compounding.
 **Independent Test**: Regime strong-bullish loads parameters and compounds over trade_horizon=3.
 
-- [ ] T019 [P] [US3] Implement regime loader supporting table/calibrated/explicit in `src/qse/distributions/regime_loader.py` (spec FR-013/FR-014)
-- [ ] T020 [US3] Propagate trade_horizon and bars_per_day to path generation for compounding in `src/qse/distributions/path_generator.py` (spec FR-015/FR-025)
-- [ ] T021 [P] [US3] Add CLI/config validation for unknown regimes and mode selection in `src/qse/config/validation.py` (spec FR-002/FR-014)
+- [X] T019 [P] [US3] Implement regime loader supporting table/calibrated/explicit in `src/qse/distributions/regime_loader.py` (spec FR-013/FR-014)
+- [X] T020 [US3] Propagate trade_horizon and bars_per_day to path generation for compounding in `src/qse/distributions/path_generator.py` (spec FR-015/FR-025)
+- [X] T021 [P] [US3] Add CLI/config validation for unknown regimes and mode selection in `src/qse/config/validation.py` (spec FR-002/FR-014)
 
 ---
 
