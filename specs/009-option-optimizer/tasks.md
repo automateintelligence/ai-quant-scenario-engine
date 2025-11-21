@@ -16,13 +16,13 @@
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 Parse Schwab Trader API PDFs (`docs/*.pdf`) and planning/yfinance_specs.md; document REST contracts (quotes, option chain, history, fundamentals, analyst info, market data) in docs/data-sources/schwab_contract.md with request/response fields, auth, limits, and gaps (spec FR-004/FR-005, US1/US2 inputs)
-- [ ] T004 [P] Define data provider interface and config schema updates (schwab primary, yfinance fallback, timeouts/retries) in `src/qse/data/__init__.py` and config comments (spec FR-056/FR-058)
-- [ ] T005 [P] Implement SchwabDataSource client for quotes/option chain/OHLCV/fundamentals/analyst endpoints with authenticated HTTP wrapper and error normalization in `src/qse/data/schwab.py` (spec FR-004/FR-005)
-- [ ] T006 [P] Implement fallback chaining wrapper that calls Schwab then yfinance with warning on fallback in `src/qse/data/factory.py` and `src/qse/data/data_loader.py` (spec FR-005 Edge: missing data)
-- [ ] T007 Add unit tests for data providers and fallback behavior in `tests/unit/data/test_schwab.py` and extend `tests/unit/data/test_yfinance.py` (spec FR-005, Edge cases)
-- [ ] T008 Update cache/loader paths and validation to support option chain snapshots (bid/ask/IV/OI/volume) in `src/qse/data/data_loader.py` (spec FR-004/FR-007/FR-023)
-- [ ] T009 [P] Wire CLI fetch command to accept `--data-source schwab` with fallback telemetry in `src/qse/cli/commands/fetch.py` (spec FR-056/FR-059)
+- [X] T003 Parse Schwab Trader API PDFs (`docs/*.pdf`) and planning/yfinance_specs.md; document REST contracts (quotes, option chain, history, fundamentals, analyst info, market data) in docs/data-sources/schwab_contract.md with request/response fields, auth, limits, and gaps (spec FR-004/FR-005, US1/US2 inputs)
+- [X] T004 [P] Define data provider interface and config schema updates (schwab primary, yfinance fallback, timeouts/retries) in `src/qse/data/__init__.py` and config comments (spec FR-056/FR-058)
+- [X] T005 [P] Implement SchwabDataSource client for quotes/option chain/OHLCV/fundamentals/analyst endpoints with authenticated HTTP wrapper and error normalization in `src/qse/data/schwab.py` (spec FR-004/FR-005)
+- [X] T006 [P] Implement fallback chaining wrapper that calls Schwab then yfinance with warning on fallback in `src/qse/data/factory.py` and `src/qse/data/data_loader.py` (spec FR-005 Edge: missing data)
+- [X] T007 Add unit tests for data providers and fallback behavior in `tests/unit/data/test_schwab.py` and extend `tests/unit/data/test_yfinance.py` (spec FR-005, Edge cases)
+- [X] T008 Update cache/loader paths and validation to support option chain snapshots (bid/ask/IV/OI/volume) in `src/qse/data/data_loader.py` (spec FR-004/FR-007/FR-023)
+- [X] T009 [P] Wire CLI fetch command to accept `--data-source schwab` with fallback telemetry in `src/qse/cli/commands/fetch.py` (spec FR-056/FR-059)
 - [X] T010 Establish parallel agent/cloud execution plan for [P] tasks (docs/data-sources/parallel-runbook.md) to maximize throughput (user request)
 
 ---

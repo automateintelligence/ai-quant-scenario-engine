@@ -1,15 +1,17 @@
-"""CLI command for fetching historical market data via yfinance."""
+"""CLI command for fetching historical market data via Schwab/yfinance."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import typer
-import yfinance as yf
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from qse.data.data_loader import DataLoader
+from qse.data.factory import FallbackDataSource, get_data_source
 from qse.utils.logging import get_logger
 
 console = Console()
@@ -27,9 +29,16 @@ def fetch(
     interval: str = typer.Option(
         "1d", "--interval", help="Data interval: 1m, 5m, 15m, 30m, 1h, 1d, 1wk, 1mo"
     ),
-    target: Path = typer.Option(
-        Path("data"), "--target", help="Target directory for parquet output"
+    target: Path = typer.Option(Path("data"), "--target", help="Target directory for parquet output"),
+    data_source: str = typer.Option(
+        "schwab", "--data-source", help="Primary data provider (schwab|yfinance|schwab_stub)",
     ),
+    allow_fallback: bool = typer.Option(
+        True, "--allow-fallback/--no-fallback", help="Fallback to yfinance on Schwab errors"
+    ),
+    access_token: Optional[str] = typer.Option(None, "--access-token", envvar="SCHWAB_ACCESS_TOKEN"),
+    timeout: float = typer.Option(10.0, "--timeout", help="HTTP timeout seconds for Schwab calls"),
+    max_retries: int = typer.Option(3, "--max-retries", help="Retries for yfinance downloads"),
 ) -> None:
     """
     Fetch historical market data and save as Parquet.
@@ -60,16 +69,12 @@ def fetch(
         raise typer.Exit(code=1)
 
     # Setup output directory
-    output_dir = (
-        target / "historical" / f"interval={interval}" / f"symbol={symbol}" / "_v1"
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / "data.parquet"
+    output_dir = target / "historical"
 
     console.print(f"[bold cyan]Fetching {symbol} data[/bold cyan]")
     console.print(f"  Period: {start} to {end}")
     console.print(f"  Interval: {interval}")
-    console.print(f"  Output: {output_file}")
+    console.print(f"  Provider: {data_source}")
 
     # Fetch data with progress indicator
     with Progress(
@@ -80,32 +85,25 @@ def fetch(
         task = progress.add_task(f"Downloading {symbol} data...", total=None)
 
         try:
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(start=start, end=end, interval=interval, auto_adjust=True)
+            primary = get_data_source(
+                data_source, access_token=access_token, timeout=timeout, max_retries=max_retries
+            )
+            provider = (
+                FallbackDataSource(primary, get_data_source("yfinance", max_retries=max_retries), logger=log)
+                if allow_fallback and data_source != "yfinance"
+                else primary
+            )
 
-            if df.empty:
-                progress.stop()
-                console.print(
-                    f"[red]Error: No data returned for {symbol}. Check symbol and date range.[/red]"
-                )
-                raise typer.Exit(code=2)
+            loader = DataLoader(
+                base_dir=output_dir, data_source=provider, storage_format="parquet", category="historical"
+            )
+            df = loader.load_ohlcv(symbol, start, end, interval=interval)
 
-            progress.update(task, description=f"Processing {len(df)} rows...")
-
-            # Standardize column names and add metadata
-            df = df.reset_index()
-            df.columns = df.columns.str.lower()
-            df["symbol"] = symbol
-            df["interval"] = interval
-
-            # Save as Parquet
-            progress.update(task, description=f"Writing {output_file.name}...")
-            df.to_parquet(output_file, index=False, engine="pyarrow", compression="snappy")
-
+            saved_path = loader._resolve_partition(symbol, f"interval={interval}", version=None) / "data.parquet"
             progress.stop()
-            console.print(f"[green]✓[/green] Successfully saved {len(df)} rows to {output_file}")
+            console.print(f"[green]✓[/green] Saved {len(df)} rows to {saved_path}")
             log.info(
-                f"Fetched {symbol} data: {len(df)} rows from {start} to {end} (interval={interval})"
+                f"Fetched {symbol} data: {len(df)} rows from {start} to {end} (interval={interval}) via {provider.name}"
             )
 
         except Exception as exc:

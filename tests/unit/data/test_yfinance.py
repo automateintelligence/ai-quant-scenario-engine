@@ -58,3 +58,27 @@ def test_dataloader_integration_with_yfinance(monkeypatch, tmp_path):
     df = loader.load_ohlcv("AAPL", "2023-01-01", "2023-01-03", interval="1d")
     assert len(df) == 3
     assert "close" in df.columns
+
+
+def test_option_chain_normalization(monkeypatch):
+    class FakeChain:
+        def __init__(self):
+            self.calls = pd.DataFrame(
+                {
+                    "strike": [100.0],
+                    "bid": [1.0],
+                    "ask": [1.1],
+                    "impliedVolatility": [0.2],
+                    "openInterest": [10],
+                    "volume": [5],
+                }
+            )
+            self.puts = pd.DataFrame()
+
+    def fake_option_chain(symbol, expiry):
+        return FakeChain()
+
+    monkeypatch.setattr(YFinanceDataSource, "_option_chain", staticmethod(fake_option_chain))
+    yf = YFinanceDataSource(max_retries=1)
+    df = yf.fetch_option_chain("AAPL", expiry="2024-01-19")
+    assert set(["bid", "ask", "implied_volatility", "open_interest", "volume", "strike", "expiry"]).issubset(df.columns)

@@ -45,12 +45,12 @@ def test_rejects_wrong_category_path(tmp_path: Path):
 def test_version_selection_prefers_latest(tmp_path: Path):
     base_dir = tmp_path / "data" / "historical"
     loader = StubLoader(base_dir, responses={})
-    part_v1 = loader._resolve_partition("AAPL", "1d", "_v1")
+    part_v1 = loader._resolve_partition("AAPL", "interval=1d", "_v1")
     part_v1.mkdir(parents=True, exist_ok=True)
     df_v1 = _make_df("2023-01-01", 2)
     loader._write_cache(part_v1 / "data.pkl", part_v1 / "data.meta.json", df_v1, "AAPL", "2023-01-01", "2023-01-02")
 
-    part_v2 = loader._resolve_partition("AAPL", "1d", "_v2")
+    part_v2 = loader._resolve_partition("AAPL", "interval=1d", "_v2")
     part_v2.mkdir(parents=True, exist_ok=True)
     df_v2 = _make_df("2023-01-01", 3)
     loader._write_cache(part_v2 / "data.pkl", part_v2 / "data.meta.json", df_v2, "AAPL", "2023-01-01", "2023-01-03")
@@ -112,7 +112,7 @@ def test_allow_stale_cache_on_failure(tmp_path: Path):
     # seed cache
     loader.load_ohlcv("AAPL", "2023-01-01", "2023-01-02", interval="1d")
 
-    cache_meta = loader._resolve_partition("AAPL", "1d", None) / "data.meta.json"
+    cache_meta = loader._resolve_partition("AAPL", "interval=1d", None) / "data.meta.json"
     meta = json.loads(cache_meta.read_text())
     meta["fetched_at"] = (datetime.utcnow() - timedelta(days=10)).isoformat()
     cache_meta.write_text(json.dumps(meta))
@@ -122,3 +122,30 @@ def test_allow_stale_cache_on_failure(tmp_path: Path):
         "AAPL", "2023-01-01", "2023-01-02", interval="1d", allow_stale_cache=True
     )
     assert len(out) == 2
+
+
+def test_option_chain_caching(tmp_path: Path):
+    class ChainSource:
+        name = "chain"
+
+        def fetch_option_chain(self, symbol: str, expiry: str | None = None):
+            return pd.DataFrame(
+                {
+                    "expiry": ["2024-01-19"],
+                    "strike": [100.0],
+                    "option_type": ["call"],
+                    "bid": [1.0],
+                    "ask": [1.2],
+                    "implied_volatility": [0.2],
+                    "open_interest": [10],
+                    "volume": [5],
+                }
+            )
+
+    base_dir = tmp_path / "data" / "option_chains"
+    loader = DataLoader(base_dir, category="option_chains", data_source=ChainSource())
+    df = loader.load_option_chain("AAPL", as_of="2024-01-02", expiry="2024-01-19")
+    assert not df.empty
+    # cached read should avoid source call
+    df_cached = loader.load_option_chain("AAPL", as_of="2024-01-02", expiry="2024-01-19")
+    assert len(df_cached) == len(df)

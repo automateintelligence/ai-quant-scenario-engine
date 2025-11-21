@@ -10,6 +10,16 @@ import pandas as pd
 from qse.exceptions import SchemaError, TimestampAnomalyError
 
 REQUIRED_COLUMNS = ["open", "high", "low", "close", "volume"]
+OPTION_CHAIN_REQUIRED_COLUMNS = [
+    "expiry",
+    "strike",
+    "option_type",
+    "bid",
+    "ask",
+    "implied_volatility",
+    "open_interest",
+    "volume",
+]
 
 
 @dataclass
@@ -62,3 +72,11 @@ def enforce_missing_tolerance(df: pd.DataFrame, max_gap: int = 3, max_ratio: flo
             f"Missing data exceeds tolerance (gap={largest_gap}, ratio={missing_ratio:.4f})"
         )
     return largest_gap, float(missing_ratio)
+
+
+def validate_option_chain(df: pd.DataFrame) -> None:
+    missing = [col for col in OPTION_CHAIN_REQUIRED_COLUMNS if col not in df.columns]
+    if missing:
+        raise SchemaError(f"Missing option chain fields: {missing}")
+    if df.empty:
+        raise SchemaError("Option chain is empty")

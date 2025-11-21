@@ -9,7 +9,11 @@ from typing import Literal
 
 import pandas as pd
 
-from qse.data.validation import compute_fingerprint, validate_ohlcv
+from qse.data.validation import (
+    compute_fingerprint,
+    validate_option_chain,
+    validate_ohlcv,
+)
 from qse.exceptions import DataSourceError
 
 
@@ -17,7 +21,7 @@ class DataLoader:
     def __init__(
         self,
         base_dir: Path,
-        category: Literal["historical", "features"] = "historical",
+        category: Literal["historical", "features", "option_chains"] = "historical",
         storage_format: Literal["parquet", "pickle"] = "parquet",
         data_source=None,
     ) -> None:
@@ -32,6 +36,8 @@ class DataLoader:
             raise DataSourceError("Historical data must live under data/historical")
         if category == "features" and "features" not in base_dir.parts:
             raise DataSourceError("Feature data must live under data/features")
+        if category == "option_chains" and "option_chains" not in base_dir.parts:
+            raise DataSourceError("Option chains must live under data/option_chains")
 
         self.base_dir = base_dir
         self.category = category
@@ -49,7 +55,7 @@ class DataLoader:
         force_refresh: bool = False,
         allow_stale_cache: bool = False,
     ) -> pd.DataFrame:
-        partition_dir = self._resolve_partition(symbol, interval, version)
+        partition_dir = self._resolve_partition(symbol, f"interval={interval}", version)
         parquet_path = partition_dir / "data.parquet"
         pickle_path = partition_dir / "data.pkl"
         cache_meta_path = partition_dir / "data.meta.json"
@@ -121,9 +127,55 @@ class DataLoader:
         self._write_cache(data_path, cache_meta_path, df, symbol, start, end)
         return df
 
+    def load_option_chain(
+        self,
+        symbol: str,
+        as_of: str,
+        expiry: str | None = None,
+        version: str | None = None,
+        force_refresh: bool = False,
+    ) -> pd.DataFrame:
+        partition_key = f"option_chain={expiry or 'all'}"
+        partition_dir = self._resolve_partition(symbol, partition_key, version, as_of=as_of)
+        data_path = partition_dir / ("data.parquet" if self.storage_format == "parquet" else "data.pkl")
+        cache_meta_path = partition_dir / "data.meta.json"
+        partition_dir.mkdir(parents=True, exist_ok=True)
+
+        if not force_refresh and data_path.exists() and cache_meta_path.exists():
+            try:
+                meta = json.loads(cache_meta_path.read_text())
+                cached_expiry = meta.get("expiry")
+                cached_as_of = meta.get("as_of")
+                if cached_expiry == (expiry or "all") and cached_as_of == as_of:
+                    return self._read_cache(data_path, meta)
+            except Exception:
+                if not force_refresh:
+                    pass
+
+        if not hasattr(self.data_source, "fetch_option_chain"):
+            raise DataSourceError("Configured data source does not support option chains")
+        df = self.data_source.fetch_option_chain(symbol=symbol, expiry=expiry)
+        validate_option_chain(df)
+        if data_path.suffix == ".parquet":
+            df.to_parquet(data_path)
+        else:
+            df.to_pickle(data_path)
+        meta = {
+            "symbol": symbol,
+            "expiry": expiry or "all",
+            "as_of": as_of,
+            "fetched_at": datetime.utcnow().isoformat(),
+            "storage_format": self.storage_format,
+            "data_source": getattr(self.data_source, "name", None),
+        }
+        cache_meta_path.write_text(json.dumps(meta, indent=2))
+        return df
+
     def _fetch_from_source(self, symbol: str, start: str, end: str, interval: str) -> pd.DataFrame:
         if self.data_source is None:
             raise DataSourceError("No data source configured; provide data_source or override")
+        if hasattr(self.data_source, "fetch_ohlcv"):
+            return self.data_source.fetch_ohlcv(symbol=symbol, start=start, end=end, interval=interval)
         return self.data_source.fetch(symbol=symbol, start=start, end=end, interval=interval)
 
     def _write_cache(
@@ -148,6 +200,7 @@ class DataLoader:
             "fingerprint": compute_fingerprint(df),
             "last_close": float(df["close"].iloc[-1]),
             "storage_format": self.storage_format,
+            "data_source": getattr(self.data_source, "name", None),
         }
         cache_meta_path.write_text(json.dumps(meta, indent=2))
 
@@ -161,8 +214,12 @@ class DataLoader:
         target = cache_path if cache_path.suffix == ".parquet" else cache_path.with_suffix(".parquet")
         return pd.read_parquet(target)
 
-    def _resolve_partition(self, symbol: str, interval: str, version: str | None) -> Path:
-        partition_root = self.base_dir / f"interval={interval}" / f"symbol={symbol}"
+    def _resolve_partition(
+        self, symbol: str, partition_key: str, version: str | None, *, as_of: str | None = None
+    ) -> Path:
+        partition_root = self.base_dir / partition_key / f"symbol={symbol}"
+        if as_of is not None:
+            partition_root = partition_root / f"as_of={as_of}"
         if version is None:
             version_dirs = []
             if partition_root.exists():
