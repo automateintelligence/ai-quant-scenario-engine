@@ -3169,3 +3169,19 @@ All Stage 0-4 pipeline implementation and E2E testing successfully completed. Co
   - Design: planning/Option_Spead_Candiate_Optimizer.md
   - Tasks: Tasks T014-T018 (Phase 3 - Stage 0-4 Pipeline Implementation)
   
+## Next Steps (Phase 3+)                                                                 │
+│                                                                                          │
+│ ### Immediate (Phase 3)                                                                  │
+│ - [ ] Fix coverage reporting configuration                                               │
+│ - [ ] Add integration tests for live data provider (Schwab API)                          │
+│ - [ ] Implement Bjerksund-Stensland pricer for American exercise                         │
+│                                                                                          │
+│ ### Near-Term (Phase 4-6)                                                                │
+│ - [ ] Greeks calculation and integration into scoring                                    │
+│ - [ ] IV surface modeling and sticky-delta evolution                                     │
+│ - [ ] Enhanced cost modeling with realistic spread estimates                             │
+│                                                                                          │
+│ ### Future (Phase 7+)                                                                    │
+│ - [ ] Live position monitoring (US8)                                                     │
+│ - [ ] Additional structure types (butterflies, calendars, diagonals)                     │
+│ - [ ] ML conditional distribution models 
