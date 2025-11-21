@@ -6,6 +6,8 @@
 but keep all specifications, constraints, and interface definitions required for correct
 implementation."
 
+Verify that feature branch is complete and meets all 'specs/009-option-optimizer/*.md' user stories, acceptance criteria; complies with the plan.md and the CONSITUTION.md, and all tasks in tasks.md are completed.
+
 /speckit.tasks "Follow the workflow in '.codex/speckit.tasks.md'.  Develop the implementation as laid out in 'specs/009-option-optimizer/spec.md', plan.md, research.md, data-model.md.  Also review 'planning/Option_Spead_Candiate_Optimizer.md' for detailed instructions.  I want to be certain that we are designing to the real API interfaces that we will be using to retrive data.  Please examine at 'planning/yfinance_specs.md' and 'docs/*.pdf' and fetch any necessary support documentation.  Then find and review '*.py' in the repo where we use yfinance().  1) Determine and document any necessary API contracts.  2) Build the clients to retrieve the necessary data for feature branch '009-option-optimizer' as outlined in 'planning/Option_Spead_Candiate_Optimizer.md'.  We want to primarily use the Schwab API, but fallback with warnings to yfinance for anything that Schwab does not have or if there is an unexpected error.  Ensure that the logic, conventions, patterns, and interfaces stay in alignment with feature branch 'specs/001-mvp-pipeline/*.md'"
 
 /speckit.implement "Be sure to follow the workflow in '.codex/speckit.implement.md'.  Implement incomplete tasks in priority order. Run the tests after each stage of development. Be sure to commit with a detailed message after each phase is completed.  Be sure to mark completed tasks in tasks.md."
