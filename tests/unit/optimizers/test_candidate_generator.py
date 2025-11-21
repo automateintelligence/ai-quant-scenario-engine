@@ -20,13 +20,13 @@ def _sample_chain() -> pd.DataFrame:
 
 def test_generate_verticals_respects_width_range():
     chain = _sample_chain()
-    generator = CandidateGenerator(GeneratorConfig(min_width=1, max_width=2))
+    generator = CandidateGenerator(GeneratorConfig(min_width=5, max_width=10))
 
     candidates = generator.generate(chain, spot=100.0)
 
     verticals = [c for c in candidates if c.structure_type == "vertical"]
     assert len(verticals) == 4  # two call spreads, two put spreads
-    assert all(1.0 <= c.width <= 2.0 for c in verticals)
+    assert all(5.0 <= c.width <= 10.0 for c in verticals)
 
 
 def test_generate_includes_multi_leg_structures():

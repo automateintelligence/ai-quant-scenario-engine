@@ -16,7 +16,7 @@ class GeneratorConfig:
     """Configuration for structure generation."""
 
     min_width: int = 1
-    max_width: int = 3
+    max_width: int = 10
 
 
 class CandidateGenerator:
@@ -61,12 +61,14 @@ class CandidateGenerator:
             subset = df[df["option_type"] == option_type].sort_values("strike")
             rows: Sequence[pd.Series] = list(subset.itertuples(index=False))
             for i, short in enumerate(rows):
-                for offset in range(self.config.min_width, self.config.max_width + 1):
-                    j = i + offset
-                    if j >= len(rows):
-                        break
+                for j in range(i + 1, len(rows)):
                     long = rows[j]
-                    width = float(offset)
+                    width = float(abs(long.strike - short.strike))
+                    if width < self.config.min_width:
+                        continue
+                    if width > self.config.max_width:
+                        break
+
                     legs = [
                         Leg(
                             option_type=option_type,
@@ -105,8 +107,8 @@ class CandidateGenerator:
         short_call = calls.iloc[0]
         long_call = calls.iloc[1]
 
-        width_put = 1.0
-        width_call = 1.0
+        width_put = float(abs(short_put.strike - long_put.strike))
+        width_call = float(abs(short_call.strike - long_call.strike))
         max_width = max(width_put, width_call)
 
         if max_width < self.config.min_width or max_width > self.config.max_width:
