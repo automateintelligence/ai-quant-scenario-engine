@@ -113,10 +113,10 @@
 **Goal**: Monitor exported position, reprice remaining horizon, trigger alerts.
 **Independent Test**: `qse monitor --position position.json --interval 300` reprices and alerts on thresholds.
 
-- [ ] T036 [US8] Implement position JSON schema + loader (legs, config snapshot, alerts) in `src/qse/monitoring/position.py` (spec FR-063/FR-064)
-- [ ] T037 [P] [US8] Implement monitoring loop (fetch data, reprice with OptionPricer, simulate remaining horizon) in `src/qse/monitoring/monitor.py` (spec FR-065–FR-069)
-- [ ] T038 [US8] Add CLI command for monitor with alert outputs in `src/qse/cli/commands/monitor.py` (spec FR-064/FR-067)
-- [ ] T039 [P] [US8] Add integration test with stub data for alert triggering in `tests/integration/test_monitor.py` (spec FR-067/FR-070)
+- [X] T036 [US8] Implement position JSON schema + loader (legs, config snapshot, alerts) in `src/qse/monitoring/position.py` (spec FR-063/FR-064)
+- [X] T037 [P] [US8] Implement monitoring loop (fetch data, reprice with OptionPricer, simulate remaining horizon) in `src/qse/monitoring/monitor.py` (spec FR-065–FR-069)
+- [X] T038 [US8] Add CLI command for monitor with alert outputs in `src/qse/cli/commands/monitor.py` (spec FR-064/FR-067)
+- [X] T039 [P] [US8] Add integration test with stub data for alert triggering in `tests/integration/test_monitor.py` (spec FR-067/FR-070)
 
 ---
 
