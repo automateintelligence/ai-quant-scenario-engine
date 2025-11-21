@@ -282,8 +282,8 @@ After selecting a trade, users can run continuous monitoring that periodically r
 ### Key Entities *(include if feature involves data)*
 
 - **Regime**: Qualitative market outlook label (neutral, strong-bullish, etc.) mapped to statistical distribution parameters (mean_daily_return, daily_vol, skew, kurtosis_excess) for Monte Carlo simulation
-- **OptionPricer**: Pluggable interface for option valuation models (Black-Scholes, Bjerksund-Stensland, Heston, SLV/SVI) providing price_option() and greeks() methods
-- **DistributionEngine**: Pluggable interface for underlying return distribution models (GARCH-t, Student-t, Laplacian, bootstrap, ML conditional) providing generate_paths() method
+- **OptionPricer**: Pluggable interface for option valuation models (Black-Scholes, Bjerksund-Stensland, Heston, SLV/SVI) providing price_option() and greeks() methods. Shared with 001-mvp-pipeline.
+- **ReturnDistribution**: Pluggable interface for underlying return distribution models (GARCH-t, Student-t, Laplacian, bootstrap, ML conditional) providing generate_paths() method for regime-driven simulation. Shared with 001-mvp-pipeline (which uses fit/sample workflow).
 - **StrategyScorer**: Pluggable interface for composite scoring functions (intraday-spreads, directional-bullish, volatility-play, gamma-scalping) providing score() method
 - **CandidateStructure**: Representation of a multi-leg option position including legs[] (each with strike, type, side, quantity, fill_price), structure_type, expiry, capital_used, max_loss
 - **Metrics**: Computed metrics bundle for a candidate including E[PnL], CI_epnl, POP_0, POP_target, ROC, MaxLoss, VaR_5%, CVaR_5%, position_greeks (Delta, Theta, Gamma, Vega)
