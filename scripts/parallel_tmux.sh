@@ -3,14 +3,16 @@
 set -euo pipefail
 
 DEFAULT_SESSION_NAME="qse_parallel"
+LOG_DIR="logs/parallel"
 
 print_usage() {
   cat <<USAGE
 Usage: ${0##*/} [-s session-name] TASK_ID [TASK_ID...]
 
 Spawn a tmux session with one pane per task ID to coordinate work from
-specs/009-option-optimizer/tasks.md. Each pane is pre-labeled and prints
-log guidance from docs/data-sources/parallel-runbook.md.
+specs/009-option-optimizer/tasks.md. Each pane is pre-labeled, exports
+PYTHONPATH=., and prints log guidance plus a recommended command
+without auto-running it.
 
 Options:
   -s SESSION   Override the tmux session name (default: ${DEFAULT_SESSION_NAME}).
@@ -29,24 +31,48 @@ require_tmux() {
   fi
 }
 
+recommended_command() {
+  case $1 in
+    T002) echo "pytest tests/unit/data/test_yfinance.py -q" ;;
+    T004) echo "# Schwab docs parsing (HTTP dependent)" ;;
+    T005) echo "# Fallback implementation" ;;
+    T006) echo "# Contract analysis" ;;
+    *) echo "pytest -q # Generic test runner" ;;
+  esac
+}
+
+pane_script() {
+  local task_id=$1
+  local log_file=$2
+  local recommended=$3
+
+  cat <<EOF_PANE
+bash -lc 'export PYTHONPATH=.; LOG_FILE="$log_file"; \
+printf "Task %s\\n" "$task_id"; \
+printf "Log to %s (append)\\n" "$LOG_FILE"; \
+printf "Recommended: %s 2>&1 | tee -a %s\\n" "$recommended" "$LOG_FILE"; \
+exec bash'
+EOF_PANE
+}
+
 create_session() {
   local session_name=$1
-  local first_task=$2
+  local task_id=$2
+  local log_file="${LOG_DIR}/${task_id}.log"
+  local recommended
+  recommended=$(recommended_command "$task_id")
 
-  tmux new-session -d -s "$session_name" -n parallel "\
-    printf 'Task %s\n' '$first_task'; \
-    printf 'Log to logs/parallel/%s.log and follow docs/data-sources/parallel-runbook.md\n' '$first_task'; \
-    exec bash"
+  tmux new-session -d -s "$session_name" -n parallel "$(pane_script "$task_id" "$log_file" "$recommended")"
 }
 
 add_pane() {
   local session_name=$1
   local task_id=$2
+  local log_file="${LOG_DIR}/${task_id}.log"
+  local recommended
+  recommended=$(recommended_command "$task_id")
 
-  tmux split-window -t "${session_name}:parallel" -v "\
-    printf 'Task %s\n' '$task_id'; \
-    printf 'Log to logs/parallel/%s.log and follow docs/data-sources/parallel-runbook.md\n' '$task_id'; \
-    exec bash"
+  tmux split-window -t "${session_name}:parallel" -v "$(pane_script "$task_id" "$log_file" "$recommended")"
 }
 
 main() {
@@ -75,6 +101,7 @@ main() {
     exit 1
   fi
 
+  mkdir -p "$LOG_DIR"
   require_tmux
 
   while [ "$#" -gt 0 ]; do
