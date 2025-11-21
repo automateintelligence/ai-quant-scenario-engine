@@ -122,9 +122,9 @@
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T040 [P] Update quickstart.md with Schwab primary/fallback workflows in `specs/009-option-optimizer/quickstart.md` (spec FR-056/Quickstart)
-- [ ] T041 Add performance/runbook notes for 1-hour full sweep + <30s retest and batch 10 tickers to `docs/runbooks/option-optimizer.md` (spec SC-001/SC-012)
-- [ ] T042 [P] Final lint/test sweep (`ruff check .`, `pytest`) and capture known issues
+- [X] T040 [P] Update quickstart.md with Schwab primary/fallback workflows in `specs/009-option-optimizer/quickstart.md` (spec FR-056/Quickstart)
+- [X] T041 Add performance/runbook notes for 1-hour full sweep + <30s retest and batch 10 tickers to `docs/runbooks/option-optimizer.md` (spec SC-001/SC-012)
+- [X] T042 [P] Final lint/test sweep (`ruff check .`, `pytest`) and capture known issues
 
 ---
 

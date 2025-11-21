@@ -11,6 +11,7 @@ qse optimize-strategy --ticker NVDA \
   --regime strong-bullish \
   --trade-horizon 3 \
   --config config.yml \
+  --data-source schwab \
   --override "mc.num_paths=5000" \
   --override "filters.max_capital=15000"
 ```
@@ -30,6 +31,7 @@ qse interactive
 > set ticker NVDA
 > set regime strong-bullish
 > set trade-horizon 1
+> set data-source schwab  # falls back to yfinance with warning if unavailable
 > override scoring.w_theta 0.2
 > run optimizer
 > export order.json
