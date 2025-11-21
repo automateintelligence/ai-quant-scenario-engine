@@ -102,9 +102,9 @@
 **Goal**: Report 95% CIs for E[PnL]/POP; adaptive paths up to cap; diagnostics for empty results.
 **Independent Test**: Adaptive paths double when CI width > threshold; empty filters produce rejection breakdown.
 
-- [ ] T033 [P] [US7] Implement CI computation and adaptive path loop with cap in `src/qse/optimizers/metrics.py` (spec FR-032/FR-033)
-- [ ] T034 [US7] Add diagnostics bundle (stage counts, rejection breakdown, hints) in `src/qse/optimizers/diagnostics.py` (spec FR-054/FR-055/FR-075)
-- [ ] T035 [P] [US7] Add tests for adaptive path behavior and empty-result diagnostics in `tests/unit/optimizers/test_diagnostics.py` (spec SC-007/SC-010)
+- [X] T033 [P] [US7] Implement CI computation and adaptive path loop with cap in `src/qse/optimizers/metrics.py` (spec FR-032/FR-033)
+- [X] T034 [US7] Add diagnostics bundle (stage counts, rejection breakdown, hints) in `src/qse/optimizers/diagnostics.py` (spec FR-054/FR-055/FR-075)
+- [X] T035 [P] [US7] Add tests for adaptive path behavior and empty-result diagnostics in `tests/unit/optimizers/test_diagnostics.py` (spec SC-007/SC-010)
 
 ---
 
