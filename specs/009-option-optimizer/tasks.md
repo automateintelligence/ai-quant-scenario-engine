@@ -23,7 +23,7 @@
 - [ ] T007 Add unit tests for data providers and fallback behavior in `tests/unit/data/test_schwab.py` and extend `tests/unit/data/test_yfinance.py` (spec FR-005, Edge cases)
 - [ ] T008 Update cache/loader paths and validation to support option chain snapshots (bid/ask/IV/OI/volume) in `src/qse/data/data_loader.py` (spec FR-004/FR-007/FR-023)
 - [ ] T009 [P] Wire CLI fetch command to accept `--data-source schwab` with fallback telemetry in `src/qse/cli/commands/fetch.py` (spec FR-056/FR-059)
-- [ ] T010 Establish parallel agent/cloud execution plan for [P] tasks (docs/data-sources/parallel-runbook.md) to maximize throughput (user request)
+- [X] T010 Establish parallel agent/cloud execution plan for [P] tasks (docs/data-sources/parallel-runbook.md) to maximize throughput (user request)
 
 ---
 
