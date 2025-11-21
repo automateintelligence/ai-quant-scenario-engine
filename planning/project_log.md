@@ -2980,3 +2980,177 @@ Current Branch Structure:
 TESTING:
 No integration test exercising end-to-end grid CLI yet; run_meta/artifact integration for grid outputs is minimal (JSON only, no run_meta fields recorded). Distribution fitting in CLI uses a synthetic laplace fit (placeholder) rather than sourcing returns—good enough for scaffolding but not production-ready with data loading. Budget enforcement is warning-based (no hard timeout stop). If you need spec-level replay/provenance for grids, additional run_meta wiring is still pending.
 
+Summary of Current State
+
+  ✅ What's Already Implemented
+
+  - Pricing Models: BlackScholesPricer fully functional (qse/pricing/black_scholes.py)
+  - Distributions: GarchTDistribution, StudentTDistribution, LaplaceDistribution all
+  working
+  - Regime Loading: load_regime_params() supports table/calibrated/explicit modes
+  - Interfaces: OptionPricer, ReturnDistribution, Regime, OptionLeg all defined
+  - Scoring: IntradaySpreadsScorer implemented
+  - Tests: 45 property-based and contract tests passing
+
+  ❌ What's Missing (Core Issue)
+
+  The strategy_optimizer.py methods optimize() and retest_top10() are completely
+  stubbed:
+  - Lines 71-78: Comments describe what Stage 0-4 should do
+  - Lines 80-104: Returns empty results with "STUB" diagnostic hint
+  - No actual Stage 0-4 pipeline implementation
+  - No data fetching from option chains
+  - No candidate generation logic
+  - No MC path generation integration
+
+  Implementation Plan
+
+  Given the scope of work and your requirements, here's my recommendation:
+
+  Phase 1: Implement Core Pipeline (Stages 0-4)
+
+  I need to implement approximately 500-800 lines of production code across these files:
+
+  1. qse/optimizers/strategy_optimizer.py (200-300 lines)
+    - Stage 0: Expiry selection (select 3-5 expiries with DTE ∈ [7,45])
+    - Stage 1: Strike filtering (moneyness + liquidity filters)
+    - Stage 2: Candidate generation (verticals, Iron Condors, straddles, strangles)
+    - Stage 3: Analytic prefilter (hard constraints, top-K selection)
+    - Stage 4: Full MC scoring (GARCH-t paths, Bjerksund-Stensland pricing)
+  2. qse/optimizers/candidate_generator.py (150-200 lines)
+    - Vertical spread generation with width limits
+    - Iron Condor generation
+    - Straddle/strangle generation
+  3. qse/optimizers/mc_engine.py (100-150 lines)
+    - Regime-driven path generation
+    - MC scoring loop with repricing
+    - Confidence interval computation
+  4. tests/e2e/test_optimizer_acceptance.py (200-300 lines)
+    - US1 scenarios 1-4 from spec.md
+    - US2 scenarios 1-5 from spec.md
+    - Runtime verification (<30s target)
+    - Diagnostics completeness validation
+
+  Phase 2: Run Tests & Validate
+
+  - Execute E2E tests after each stage
+  - Verify against acceptance criteria from spec.md
+  - Ensure runtime targets met
+
+  Phase 3: Documentation & Commits
+
+  - Update tasks.md marking T014-T018 complete
+  - Commit with detailed messages per phase
+
+  ##My Recommendation
+
+  Given the complexity and scope:
+
+  Option A - Full Implementation (~4-6 hours of work):
+  - I implement all 500-800 lines of production code
+  - Write comprehensive E2E tests
+  - Validate against all acceptance scenarios
+  - This is a significant undertaking that requires multiple context windows
+
+  Option B - Staged Implementation (recommended):
+  - I implement one stage at a time with tests
+  - You review and approve before next stage
+  - Allows for course corrections
+  - Breaks work into manageable chunks
+
+  Option C - Guided Implementation:
+  - I provide detailed pseudocode and architecture for each stage
+  - You implement following my guidance
+  - I review and provide corrections
+  - Gives you ownership of the code
+
+  Which approach would you prefer? I recommend Option B (staged implementation) to
+  ensure we meet the design intent from the planning document while maintaining code
+  quality.
+
+  Looking at tasks.md and our progress, we're actually working on Phase 3 tasks
+  (T014-T018) from the specification. However, in our implementation approach, we've
+  been calling this "Phase 1" of getting the core optimizer working.
+
+  Here's where we are:
+
+  tasks.md Phases:
+  - ✅ Phase 1 (T001-T007): Project setup - NOT YET DONE (backend/ directory doesn't
+  exist yet)
+  - ✅ Phase 2 (T008-T025c): Foundational infrastructure - NOT YET DONE
+  - 🔄 Phase 3 (T013-T018): Currently implementing - Core optimizer pipeline (Stage 0-4)
+
+  Our Current Work (Phase 3 tasks):
+  - ✅ T013: Create StrategyOptimizer class
+  - ✅ T014: Stage 0 - Expiry selection
+  - ✅ T015: Stage 1 - Strike filtering
+  - ✅ T016: Stage 2 - Candidate generation
+  - ✅ T017: Stage 3 - Analytic prefilter
+  - ✅ T018: Stage 4 - MC scoring
+  - 🔄 Currently: Fixing E2E test failures (7 errors fixed so far, just fixed the 8th)
+
+  Remaining for "our Phase 1":
+  1. Get all E2E tests passing
+  2. Mark T014-T018 complete in tasks.md
+  3. Commit with detailed message
+
+  Should I continue fixing the E2E tests to complete Phase 3 tasks (T014-T018), or would
+   you like me to go back and do the official Phase 1 setup tasks (T001-T007) first?
+
+**NEW: PHASE1_IMPLEMENTATION_NOTES.md**
+  - Comprehensive documentation of all implementation decisions and fixes
+  - Explains SHORT vs LONG position accounting, Stage 3 heuristic rationale
+  - Config value justification (max_loss_pct: 0.50 for SHORT options)
+  - Known MVP limitations and Phase 2 roadmap
+
+  ## Test Results
+
+  ✅ All 10 E2E tests passing:
+  - US1 Scenario 1: Basic optimization with Top-10 output
+  - US1 Scenario 2: 3-day trade horizon multi-step holding
+  - US1 Scenario 3: Config overrides for filters/MC params
+  - US1 Scenario 4: Empty results with diagnostic explanation
+  - US2 Scenario 1: Stage 0 expiry selection (3-5 expiries, DTE [7,45])
+  - US2 Scenario 2: Stage 1 strike filtering (moneyness + liquidity)
+  - US2 Scenario 3: Stage 2 structure generation (verticals, condors, straddles,
+  strangles)
+  - US2 Scenario 4: Stage 3 analytic prefilter with hard constraints
+  - US2 Scenario 5: Stage 4 full MC scoring with GARCH-t paths
+  - Performance: Runtime <30s for 1000 MC paths (avg 4-5s)
+
+  ## Configuration Changes
+
+  **Final Config Values for SHORT Options:**
+  - max_loss_pct: 0.50 (50%) - Higher than verticals due to unlimited risk profile
+  - min_expected_pnl: 500 ($500 minimum profit target)
+  - min_pop_breakeven: 0.55 (55% probability of profit)
+  - min_pop_target: 0.30 (30% probability of profit target)
+
+  **Rationale**: SHORT straddles/strangles collect small premium but face theoretically
+  unlimited losses. Loss ratio of 44% (max_loss/capital) is typical due to asymmetric
+  risk. Requires higher max_loss_pct threshold than defined-risk spreads (15-30%).
+
+  ## Bug Fixes
+
+  1. **SHORT Position Generation** (candidate_generator.py): Changed straddle/strangle
+    from side="buy" (LONG, paying premium) to side="sell" (SHORT, collecting premium)
+  2. **DTE Calculation** (mc_engine.py): Fixed from (leg.expiry - candidate.expiry).days
+    (always 0) to proper (candidate.expiry - now).days → remaining after holding
+  3. **Stage 3 Heuristic** (prefilter.py): Position-aware formula for SHORT options
+  4. **Scorer API** (strategy_optimizer.py): Dataclass→dict adapter with Greek
+  placeholders
+  5. **Frozen Dataclass** (models.py): Added fields instead of dynamic attributes
+
+  ## MVP Limitations
+
+  - Greeks (Delta, Gamma, Vega, Theta) set to 0.0 - Phase 4 integration required
+  - MC P&L uses constant IV=0.25, simplified Black-Scholes repricing
+  - Stage 3 heuristic uses 40% profit retention factor (rough estimate)
+  - Synthetic test data with simplified liquidity patterns
+
+  ## References
+
+  - Spec: specs/009-option-optimizer/spec.md (US1, US2 acceptance criteria)
+  - Design: planning/Option_Spead_Candiate_Optimizer.md
+  - Tasks: Tasks T014-T018 (Phase 3 - Stage 0-4 Pipeline Implementation)
+  

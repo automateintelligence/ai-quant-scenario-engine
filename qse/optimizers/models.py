@@ -51,6 +51,8 @@ class CandidateStructure:
     expiry: pd.Timestamp
     width: float
     metrics: CandidateMetrics | None = None
+    composite_score: float | None = None
+    score_decomposition: dict[str, float] | None = None
 
     @property
     def net_premium(self) -> float:

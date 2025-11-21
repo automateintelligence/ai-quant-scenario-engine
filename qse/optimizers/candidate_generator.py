@@ -177,7 +177,7 @@ class CandidateGenerator:
                 option_type="call",
                 strike=float(strike),
                 expiry=call_row.expiry,
-                side="buy",
+                side="sell",  # SHORT straddle: SELL to collect premium
                 premium=float(call_row.mid),
                 bid=float(getattr(call_row, "bid", None)) if hasattr(call_row, "bid") else None,
                 ask=float(getattr(call_row, "ask", None)) if hasattr(call_row, "ask") else None,
@@ -186,7 +186,7 @@ class CandidateGenerator:
                 option_type="put",
                 strike=float(strike),
                 expiry=put_row.expiry,
-                side="buy",
+                side="sell",  # SHORT straddle: SELL to collect premium
                 premium=float(put_row.mid),
                 bid=float(getattr(put_row, "bid", None)) if hasattr(put_row, "bid") else None,
                 ask=float(getattr(put_row, "ask", None)) if hasattr(put_row, "ask") else None,
@@ -215,7 +215,7 @@ class CandidateGenerator:
                 option_type="call",
                 strike=float(call_leg.strike),
                 expiry=call_leg.expiry,
-                side="buy",
+                side="sell",  # SHORT strangle: SELL to collect premium
                 premium=float(call_leg.mid),
                 bid=float(getattr(call_leg, "bid", None)) if hasattr(call_leg, "bid") else None,
                 ask=float(getattr(call_leg, "ask", None)) if hasattr(call_leg, "ask") else None,
@@ -224,7 +224,7 @@ class CandidateGenerator:
                 option_type="put",
                 strike=float(put_leg.strike),
                 expiry=put_leg.expiry,
-                side="buy",
+                side="sell",  # SHORT strangle: SELL to collect premium
                 premium=float(put_leg.mid),
                 bid=float(getattr(put_leg, "bid", None)) if hasattr(put_leg, "bid") else None,
                 ask=float(getattr(put_leg, "ask", None)) if hasattr(put_leg, "ask") else None,

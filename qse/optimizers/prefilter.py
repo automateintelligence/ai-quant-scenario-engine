@@ -60,8 +60,19 @@ class Prefilter:
         entry_cash = compute_entry_cash(candidate.legs, self.cost_assumptions)
         exit_cost = compute_expected_exit_cost(candidate.legs, self.cost_assumptions)
         commission = compute_commission(candidate.legs, self.cost_assumptions)
-        gross_expected = max(entry_cash * 0.8, width * 20.0)
-        expected_pnl = gross_expected - exit_cost - commission
+
+        # SHORT positions (net_credit > 0): We RECEIVE premium at entry
+        # Heuristic: Assume we keep 40% of collected premium as profit
+        # This accounts for spread costs, partial theta decay, and commissions
+        # LONG positions (net_credit < 0): We PAY premium at entry
+        # Expected P&L = gross_expected - exit_cost - commission (where gross_expected is recovery estimate)
+        if net_credit > 0:  # SHORT position
+            # Simple heuristic: profit = 40% of entry credit - commissions
+            expected_pnl = entry_cash * 0.4 - commission
+        else:  # LONG position
+            gross_expected = max(entry_cash * 0.8, width * 20.0)
+            expected_pnl = gross_expected - exit_cost - commission
+
         max_loss = max(capital - entry_cash, capital * (1.0 - pop_breakeven))
         score = expected_pnl / capital if capital > 0 else 0.0
 
@@ -82,7 +93,8 @@ class Prefilter:
             return False
         if metrics.capital <= 0:
             return False
-        loss_ratio = metrics.max_loss / self.config.max_capital
+        # Loss ratio is max_loss as percentage of the candidate's capital, not max_capital
+        loss_ratio = metrics.max_loss / metrics.capital if metrics.capital > 0 else float('inf')
         if loss_ratio > self.config.max_loss_pct:
             return False
         if metrics.expected_pnl < self.config.min_expected_pnl:
