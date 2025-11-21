@@ -7,6 +7,7 @@ from pathlib import Path
 
 import typer
 
+from qse.config.loader import load_config_with_precedence
 from qse.cli.validation import require_positive
 from qse.data.versioning import compute_version
 from qse.exceptions import ConfigConflictError, ConfigValidationError
@@ -17,10 +18,32 @@ log = get_logger(__name__, component="cli_replay")
 
 
 def replay(
+    config: Path | None = typer.Option(None, "--config", help="Optional YAML/JSON config path"),
     run_meta_path: Path = typer.Argument(..., exists=True, readable=True, help="Path to run_meta.json to replay"),
     allow_data_drift: bool = typer.Option(False, "--allow-data-drift", help="Proceed even if drift detected"),
     current_data_path: Path | None = typer.Option(None, help="Optional CSV of current data for drift check"),
 ) -> None:
+    defaults = {
+        "run_meta_path": str(run_meta_path),
+        "allow_data_drift": allow_data_drift,
+        "current_data_path": str(current_data_path) if current_data_path else None,
+    }
+    casters = {
+        "run_meta_path": str,
+        "allow_data_drift": lambda v: str(v).lower() in {"1", "true", "yes", "on"},
+        "current_data_path": str,
+    }
+    merged = load_config_with_precedence(
+        config_path=config,
+        env_prefix="QSE_",
+        cli_values=defaults,
+        defaults=defaults,
+        casters=casters,
+    )
+    run_meta_path = Path(merged["run_meta_path"])
+    allow_data_drift = merged["allow_data_drift"]
+    current_data_path = Path(merged["current_data_path"]) if merged.get("current_data_path") else None
+
     current_version = None
     if current_data_path:
         df = None

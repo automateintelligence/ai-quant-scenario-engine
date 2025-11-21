@@ -12,6 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from qse.data.data_loader import DataLoader
 from qse.data.factory import FallbackDataSource, get_data_source
+from qse.config.loader import load_config_with_precedence
 from qse.utils.logging import get_logger
 
 console = Console()
@@ -19,6 +20,7 @@ log = get_logger(__name__, component="cli.fetch")
 
 
 def fetch(
+    config: Optional[Path] = typer.Option(None, "--config", help="Path to config.yml file"),
     symbol: str = typer.Option(..., "--symbol", help="Stock ticker symbol (e.g., AAPL)"),
     start: str = typer.Option(
         ..., "--start", help="Start date in YYYY-MM-DD format (e.g., 2018-01-01)"
@@ -49,6 +51,45 @@ def fetch(
     Example:
         python -m qse.cli.fetch --symbol AAPL --start 2018-01-01 --end 2024-12-31 --interval 1d --target data/
     """
+    defaults = {
+        "symbol": symbol,
+        "start": start,
+        "end": end,
+        "interval": interval,
+        "target": str(target),
+        "data_source": data_source,
+        "allow_fallback": allow_fallback,
+        "timeout": timeout,
+        "max_retries": max_retries,
+    }
+    casters = {
+        "symbol": str,
+        "start": str,
+        "end": str,
+        "interval": str,
+        "target": str,
+        "data_source": str,
+        "allow_fallback": lambda v: str(v).lower() in {"1", "true", "yes", "on"},
+        "timeout": float,
+        "max_retries": int,
+    }
+    merged = load_config_with_precedence(
+        config_path=config,
+        env_prefix="QSE_",
+        cli_values=defaults,
+        defaults=defaults,
+        casters=casters,
+    )
+    symbol = merged["symbol"]
+    start = merged["start"]
+    end = merged["end"]
+    interval = merged["interval"]
+    target = Path(merged["target"])
+    data_source = merged["data_source"]
+    allow_fallback = merged["allow_fallback"]
+    timeout = merged["timeout"]
+    max_retries = merged["max_retries"]
+
     # Validate dates
     try:
         start_dt = datetime.strptime(start, "%Y-%m-%d")

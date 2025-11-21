@@ -9,6 +9,7 @@ import pandas as pd
 import typer
 
 from qse.cli.validation import validate_screen_inputs
+from qse.config.loader import load_config_with_precedence
 from qse.data.cache import load_or_fetch, parse_symbol_list
 from qse.features.pipeline import enrich_ohlcv
 from qse.schema.episode import CandidateEpisode
@@ -21,6 +22,7 @@ log = get_logger(__name__, component="cli_conditional")
 
 
 def conditional(
+    config: Path | None = typer.Option(None, "--config", help="Optional YAML/JSON config path"),
     universe: str = typer.Option("", help="Path to CSV file with OHLCV data"),
     symbols: str = typer.Option("", help="Symbol list: ['AAPL','MSFT'] or AAPL,MSFT"),
     start: str = typer.Option(None, help="Start date YYYY-MM-DD when using symbols input"),
@@ -46,6 +48,89 @@ def conditional(
     distance_threshold: float = typer.Option(2.0, help="Similarity threshold for state matching"),
     use_audit: bool = typer.Option(True, "--use-audit/--no-use-audit", help="Prefer validated distribution audit models"),
 ) -> None:
+    defaults = {
+        "universe": universe,
+        "symbols": symbols,
+        "start": start,
+        "end": end,
+        "interval": interval,
+        "target": str(target),
+        "gap_min": gap_min,
+        "volume_z_min": volume_z_min,
+        "horizon": horizon,
+        "stock_strategy": stock_strategy,
+        "option_strategy": option_strategy,
+        "option_type": option_type,
+        "strike": strike,
+        "maturity_days": maturity_days,
+        "iv": iv,
+        "rfr": rfr,
+        "mode": mode,
+        "paths": paths,
+        "steps": steps,
+        "seed": seed,
+        "distribution": distribution,
+        "state": state,
+        "distance_threshold": distance_threshold,
+        "use_audit": use_audit,
+    }
+    casters = {
+        "universe": str,
+        "symbols": str,
+        "start": str,
+        "end": str,
+        "interval": str,
+        "target": str,
+        "gap_min": float,
+        "volume_z_min": float,
+        "horizon": int,
+        "stock_strategy": str,
+        "option_strategy": str,
+        "option_type": str,
+        "strike": float,
+        "maturity_days": int,
+        "iv": float,
+        "rfr": float,
+        "mode": str,
+        "paths": int,
+        "steps": int,
+        "seed": int,
+        "distribution": str,
+        "state": str,
+        "distance_threshold": float,
+        "use_audit": lambda v: str(v).lower() in {"1", "true", "yes", "on"},
+    }
+    merged = load_config_with_precedence(
+        config_path=config,
+        env_prefix="QSE_",
+        cli_values=defaults,
+        defaults=defaults,
+        casters=casters,
+    )
+    universe = merged["universe"]
+    symbols = merged["symbols"]
+    start = merged["start"]
+    end = merged["end"]
+    interval = merged["interval"]
+    target = Path(merged["target"])
+    gap_min = merged["gap_min"]
+    volume_z_min = merged["volume_z_min"]
+    horizon = merged["horizon"]
+    stock_strategy = merged["stock_strategy"]
+    option_strategy = merged["option_strategy"]
+    option_type = merged["option_type"]
+    strike = merged["strike"]
+    maturity_days = merged["maturity_days"]
+    iv = merged["iv"]
+    rfr = merged["rfr"]
+    mode = merged["mode"]
+    paths = merged["paths"]
+    steps = merged["steps"]
+    seed = merged["seed"]
+    distribution = merged["distribution"]
+    state = merged["state"]
+    distance_threshold = merged["distance_threshold"]
+    use_audit = merged["use_audit"]
     validate_screen_inputs(horizon=horizon, max_workers=1)
     valid_intervals = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
     if interval not in valid_intervals:

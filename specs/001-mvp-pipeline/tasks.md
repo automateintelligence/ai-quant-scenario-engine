@@ -645,7 +645,7 @@ def mock_run_config():
 
 - [X] T099 [US7] Add --config flag to all CLI commands to load YAML config file per FR-024/FR-033
 - [X] T100 [US7] Implement CLI flag override of config values per plan.md onboarding workflow and FR-024/FR-026 precedence (CLI args override YAML values per T095a)
-- [ ] T101 [US7] Document config file format in README.md with examples per spec.md US7 acceptance scenarios and FR-024/FR-033 requirements
+- [X] T101 [US7] Document config file format in README.md with examples per spec.md US7 acceptance scenarios and FR-024/FR-033 requirements
 
 **Checkpoint**: User Story 7 complete - component swapping via configuration verified
 
