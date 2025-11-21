@@ -52,6 +52,34 @@ CPU-only quant scenario engine for backtesting and Monte Carlo workflows across 
 
 </details>
 
+## Configuration files (US7)
+You can drive all commands with a YAML/JSON config and overrides.
+
+**Precedence:** CLI flags > environment vars (`QSE_` prefix) > YAML/JSON > built-ins. Overrides are logged.
+
+**Example YAML (`configs/run_aapl.yaml`):**
+```yaml
+symbol: AAPL
+data_source: yfinance        # or schwab_stub
+distribution: student_t      # laplace | student_t | normal | garch_t
+pricer: black_scholes        # black_scholes | py_vollib | quantlib(stub)
+mc:
+  paths: 1500
+  steps: 90
+  seed: 123
+```
+
+Use with any CLI that supports `--config` (compare, grid, screen, conditional, replay):
+```bash
+python -m qse.cli.main compare --config configs/run_aapl.yaml --paths 2000  # CLI overrides YAML
+```
+Environment overrides (examples):
+```bash
+export QSE_SYMBOL=MSFT
+export QSE_MC_PATHS=500
+python -m qse.cli.main compare --config configs/run_aapl.yaml
+```
+
 ## Testing
 - Run all tests with coverage: `pytest tests/ --cov=backtesting --cov-report=term-missing`
 - Unit tests: `pytest tests/unit -v`
